@@ -22,8 +22,8 @@ const CONTACTS_TOOL: Tool = {
       properties: {
         operation: {
           type: "string",
-          description: "Operation to perform: 'search', 'list', or 'create'",
-          enum: ["search", "list", "create"]
+          description: "Operation to perform: 'search', 'list', 'listByFolder', 'recentByFolder', 'byDateRange', or 'create'",
+          enum: ["search", "list", "listByFolder", "recentByFolder", "byDateRange", "create"]
         },
         searchText: {
           type: "string",
@@ -39,7 +39,19 @@ const CONTACTS_TOOL: Tool = {
         },
         folderName: {
           type: "string",
-          description: "Name of the folder to create the note in (optional for create operation, defaults to 'Claude')"
+          description: "Name of the folder to create the note in (optional for create operation, defaults to 'Claude') or to list notes from (required for listByFolder, recentByFolder, and byDateRange operations)"
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of notes to return (optional for recentByFolder and byDateRange operations, defaults to 5 and 20 respectively)"
+        },
+        fromDate: {
+          type: "string",
+          description: "Start date in ISO format to filter notes by creation date (required for byDateRange operation)"
+        },
+        toDate: {
+          type: "string",
+          description: "End date in ISO format to filter notes by creation date (required for byDateRange operation)"
         }
       },
       required: ["operation"]

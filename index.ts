@@ -302,6 +302,83 @@ function initServer() {
                 };
               }
               
+              case "listByFolder": {
+                if (!args.folderName) {
+                  throw new Error("Folder name is required for listByFolder operation");
+                }
+                
+                const result = await notesModule.getNotesFromFolder(args.folderName);
+                
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.success ?
+                      result.notes && result.notes.length ?
+                        `Found ${result.notes.length} notes in folder "${args.folderName}":\n\n${result.notes.map((note) => `${note.name}:\n${note.content}`).join("\n\n")}` :
+                        `No notes found in folder "${args.folderName}"` :
+                      `Error: ${result.message}`
+                  }],
+                  isError: !result.success
+                };
+              }
+              
+              case "recentByFolder": {
+                if (!args.folderName) {
+                  throw new Error("Folder name is required for recentByFolder operation");
+                }
+                
+                const result = await notesModule.getRecentNotesFromFolder(args.folderName, args.limit);
+                
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.success ?
+                      result.notes && result.notes.length ?
+                        `Found ${result.notes.length} recent notes in folder "${args.folderName}":\n\n${result.notes.map((note) => `${note.name}:\n${note.content}`).join("\n\n")}` :
+                        `No recent notes found in folder "${args.folderName}"` :
+                      `Error: ${result.message}`
+                  }],
+                  isError: !result.success
+                };
+              }
+              
+              case "byDateRange": {
+                if (!args.folderName) {
+                  throw new Error("Folder name is required for byDateRange operation");
+                }
+                
+                const result = await notesModule.getNotesByDateRange(
+                  args.folderName,
+                  args.fromDate,
+                  args.toDate,
+                  args.limit
+                );
+                
+                const dateRangeText = args.fromDate && args.toDate 
+                  ? `between ${new Date(args.fromDate).toLocaleDateString()} and ${new Date(args.toDate).toLocaleDateString()}`
+                  : args.fromDate 
+                    ? `since ${new Date(args.fromDate).toLocaleDateString()}`
+                    : args.toDate 
+                      ? `before ${new Date(args.toDate).toLocaleDateString()}`
+                      : "";
+                
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.success ?
+                      result.notes && result.notes.length ?
+                        `Found ${result.notes.length} notes ${dateRangeText} in folder "${args.folderName}":\n\n${result.notes.map((note) => {
+                          const creationDate = note.creationDate ? `Created: ${new Date(note.creationDate).toLocaleString()}\n` : '';
+                          const modificationDate = note.modificationDate ? `Modified: ${new Date(note.modificationDate).toLocaleString()}\n` : '';
+                          return `${note.name}:\n${creationDate}${modificationDate}${note.content}`;
+                        }).join("\n\n")}` :
+                        `No notes found ${dateRangeText} in folder "${args.folderName}"` :
+                      `Error: ${result.message}`
+                  }],
+                  isError: !result.success
+                };
+              }
+              
               case "create": {
                 if (!args.title || !args.body) {
                   throw new Error("Title and body are required for create operation");
@@ -1092,11 +1169,14 @@ function isContactsArgs(args: unknown): args is { name?: string } {
 }
 
 function isNotesArgs(args: unknown): args is { 
-  operation: "search" | "list" | "create";
+  operation: "search" | "list" | "listByFolder" | "recentByFolder" | "create" | "byDateRange";
   searchText?: string;
   title?: string;
   body?: string;
   folderName?: string;
+  limit?: number;
+  fromDate?: string;
+  toDate?: string;
 } {
   if (typeof args !== "object" || args === null) {
     return false;
@@ -1107,7 +1187,7 @@ function isNotesArgs(args: unknown): args is {
     return false;
   }
   
-  if (!["search", "list", "create"].includes(operation)) {
+  if (!["search", "list", "listByFolder", "recentByFolder", "create", "byDateRange"].includes(operation)) {
     return false;
   }
   
@@ -1116,6 +1196,46 @@ function isNotesArgs(args: unknown): args is {
     const { searchText } = args as { searchText?: unknown };
     if (typeof searchText !== "string" || searchText === "") {
       return false;
+    }
+  }
+  
+  if (operation === "listByFolder" || operation === "recentByFolder" || operation === "byDateRange") {
+    const { folderName } = args as { folderName?: unknown };
+    if (typeof folderName !== "string" || folderName === "") {
+      return false;
+    }
+    
+    // Check limit if provided
+    const { limit } = args as { limit?: unknown };
+    if (limit !== undefined && typeof limit !== "number") {
+      return false;
+    }
+    
+    // Check date parameters for byDateRange
+    if (operation === "byDateRange") {
+      const { fromDate, toDate } = args as { fromDate?: unknown, toDate?: unknown };
+      
+      // At least one date should be provided for date range filtering to make sense
+      if (fromDate === undefined && toDate === undefined) {
+        return false;
+      }
+      
+      // Validate date format if provided
+      if (fromDate !== undefined && typeof fromDate !== "string") {
+        return false;
+      }
+      
+      if (toDate !== undefined && typeof toDate !== "string") {
+        return false;
+      }
+      
+      // Validate ISO date format
+      try {
+        if (fromDate) new Date(fromDate as string).toISOString();
+        if (toDate) new Date(toDate as string).toISOString();
+      } catch (error) {
+        return false;
+      }
     }
   }
   
