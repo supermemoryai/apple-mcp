@@ -665,6 +665,113 @@ end tell`);
   }
 }
 
+async function getLatestMails(account: string, limit = 5): Promise<EmailMessage[]> {
+  try {
+    if (!(await checkMailAccess())) {
+      return [];
+    }
+
+    const script = `
+tell application "Mail"
+    set resultList to {}
+    try
+        set targetAccount to first account whose name is "${account.replace(/"/g, '\\"')}"
+        set acctMailboxes to every mailbox of targetAccount
+
+        repeat with mb in acctMailboxes
+            try
+                set messagesList to (messages of mb)
+                set sortedMessages to my sortMessagesByDate(messagesList)
+                set msgLimit to ${limit}
+                if (count of sortedMessages) < msgLimit then
+                    set msgLimit to (count of sortedMessages)
+                end if
+
+                repeat with i from 1 to msgLimit
+                    try
+                        set currentMsg to item i of sortedMessages
+                        set msgData to {subject:(subject of currentMsg), sender:(sender of currentMsg), ¬
+                                    date:(date sent of currentMsg) as string, mailbox:(name of mb)}
+
+                        try
+                            set msgContent to content of currentMsg
+                            if length of msgContent > 500 then
+                                set msgContent to (text 1 thru 500 of msgContent) & "..."
+                            end if
+                            set msgData to msgData & {content:msgContent}
+                        on error
+                            set msgData to msgData & {content:"[Content not available]"}
+                        end try
+
+                        set end of resultList to msgData
+                    on error
+                        -- Skip problematic messages
+                    end try
+                end repeat
+
+                if (count of resultList) ≥ ${limit} then exit repeat
+            on error
+                -- Skip problematic mailboxes
+            end try
+        end repeat
+    on error errMsg
+        return "Error: " & errMsg
+    end try
+
+    return resultList
+end tell
+
+on sortMessagesByDate(messagesList)
+    set sortedMessages to sort messagesList by date sent
+    return sortedMessages
+end sortMessagesByDate`;
+
+    const asResult = await runAppleScript(script);
+
+    if (asResult && asResult.startsWith('Error:')) {
+      throw new Error(asResult);
+    }
+
+    const emailData = [];
+    const matches = asResult.match(/\{([^}]+)\}/g);
+    if (matches && matches.length > 0) {
+      for (const match of matches) {
+        try {
+          const props = match.substring(1, match.length - 1).split(',');
+          const email: any = {};
+
+          props.forEach(prop => {
+            const parts = prop.split(':');
+            if (parts.length >= 2) {
+              const key = parts[0].trim();
+              const value = parts.slice(1).join(':').trim();
+              email[key] = value;
+            }
+          });
+
+          if (email.subject || email.sender) {
+            emailData.push({
+              subject: email.subject || "No subject",
+              sender: email.sender || "Unknown sender",
+              dateSent: email.date || new Date().toString(),
+              content: email.content || "[Content not available]",
+              isRead: false,
+              mailbox: `${account} - ${email.mailbox || "Unknown"}`
+            });
+          }
+        } catch (parseError) {
+          console.error('Error parsing email match:', parseError);
+        }
+      }
+    }
+
+    return emailData;
+  } catch (error) {
+    console.error('Error getting latest emails:', error);
+    return [];
+  }
+}
+
 export default {
   getUnreadMails,
   searchMails,
@@ -672,4 +779,5 @@ export default {
   getMailboxes,
   getAccounts,
   getMailboxesForAccount,
+  getLatestMails
 };

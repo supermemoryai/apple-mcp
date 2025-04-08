@@ -656,6 +656,25 @@ end tell`;
                 };
               }
 
+              case "latest": {
+                if (!args.account) {
+                  throw new Error("Account is required for latest operation");
+                }
+                const emails = await mailModule.getLatestMails(args.account, args.limit);
+                return {
+                  content: [{ 
+                    type: "text", 
+                    text: emails.length > 0 ? 
+                      `Found ${emails.length} latest email(s) in account "${args.account}":\n\n` +
+                      emails.map((email: any) => 
+                        `[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? '...' : ''}`
+                      ).join("\n\n") :
+                      `No latest emails found in account "${args.account}"`
+                  }],
+                  isError: false
+                };
+              }
+
               default:
                 throw new Error(`Unknown operation: ${args.operation}`);
             }
@@ -1176,7 +1195,7 @@ function isMessagesArgs(args: unknown): args is {
 }
 
 function isMailArgs(args: unknown): args is {
-  operation: "unread" | "search" | "send" | "mailboxes" | "accounts";
+  operation: "unread" | "search" | "send" | "mailboxes" | "accounts" | "latest";
   account?: string;
   mailbox?: string;
   limit?: number;
@@ -1191,7 +1210,7 @@ function isMailArgs(args: unknown): args is {
   
   const { operation, account, mailbox, limit, searchTerm, to, subject, body, cc, bcc } = args as any;
   
-  if (!operation || !["unread", "search", "send", "mailboxes", "accounts"].includes(operation)) {
+  if (!operation || !["unread", "search", "send", "mailboxes", "accounts", "latest"].includes(operation)) {
     return false;
   }
   
@@ -1208,6 +1227,7 @@ function isMailArgs(args: unknown): args is {
     case "unread":
     case "mailboxes":
     case "accounts":
+    case "latest":
       // No additional required fields
       break;
   }
