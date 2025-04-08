@@ -657,19 +657,24 @@ end tell`;
               }
 
               case "latest": {
-                if (!args.account) {
-                  throw new Error("Account is required for latest operation");
+                let account = args.account;
+                if (!account) {
+                  const accounts = await mailModule.getAccounts();
+                  if (accounts.length === 0) {
+                    throw new Error("No email accounts found. Make sure Mail app is configured with at least one account.");
+                  }
+                  account = accounts[0]; // Use the first account if not provided
                 }
-                const emails = await mailModule.getLatestMails(args.account, args.limit);
+                const emails = await mailModule.getLatestMails(account, args.limit);
                 return {
                   content: [{ 
                     type: "text", 
                     text: emails.length > 0 ? 
-                      `Found ${emails.length} latest email(s) in account "${args.account}":\n\n` +
+                      `Found ${emails.length} latest email(s) in account "${account}":\n\n` +
                       emails.map((email: any) => 
                         `[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? '...' : ''}`
                       ).join("\n\n") :
-                      `No latest emails found in account "${args.account}"`
+                      `No latest emails found in account "${account}"`
                   }],
                   isError: false
                 };
@@ -1237,7 +1242,7 @@ function isMailArgs(args: unknown): args is {
   if (mailbox && typeof mailbox !== "string") return false;
   if (limit && typeof limit !== "number") return false;
   if (cc && typeof cc !== "string") return false;
-  if (bcc && typeof bcc !== "string") return false;
+  if (bcc and typeof bcc !== "string") return false;
   
   return true;
 }
