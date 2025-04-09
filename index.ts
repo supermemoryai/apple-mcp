@@ -449,6 +449,7 @@ function initServer() {
             const mailModule = await loadModule('mail');
             
             switch (args.operation) {
+              // Removed 'list' case handler
               case "unread": {
                 // If an account is specified, we'll try to search specifically in that account
                 let emails;
@@ -588,10 +589,20 @@ end tell`;
               }
 
               case "search": {
-                if (!args.searchTerm) {
-                  throw new Error("Search term is required for search operation");
+                // Removed redundant check for searchTerm - isMailArgs handles it now
+                // Add type check/assertion for searchTerm
+                if (typeof args.searchTerm !== 'string') {
+                  throw new Error("Internal error: searchTerm is not a string despite validation.");
                 }
-                const emails = await mailModule.searchMails(args.searchTerm, args.limit);
+                // Pass all args to searchMails
+                const emails = await mailModule.searchMails(
+                    args.searchTerm,
+                    args.account,
+                    args.mailbox,
+                    args.fromDate, // Pass fromDate
+                    args.toDate,   // Pass toDate
+                    args.limit
+                );
                 return {
                   content: [{ 
                     type: "text", 
@@ -1176,11 +1187,13 @@ function isMessagesArgs(args: unknown): args is {
 }
 
 function isMailArgs(args: unknown): args is {
-  operation: "unread" | "search" | "send" | "mailboxes" | "accounts";
+  operation: "unread" | "search" | "send" | "mailboxes" | "accounts"; // Removed 'list'
   account?: string;
   mailbox?: string;
   limit?: number;
   searchTerm?: string;
+  fromDate?: string; // Added
+  toDate?: string;   // Added
   to?: string;
   subject?: string;
   body?: string;
@@ -1189,16 +1202,28 @@ function isMailArgs(args: unknown): args is {
 } {
   if (typeof args !== "object" || args === null) return false;
   
-  const { operation, account, mailbox, limit, searchTerm, to, subject, body, cc, bcc } = args as any;
-  
-  if (!operation || !["unread", "search", "send", "mailboxes", "accounts"].includes(operation)) {
-    return false;
+  // Explicitly check operation type and validity
+  const { operation, ...restArgs } = args as any; // Destructure operation separately
+  if (typeof operation !== "string") {
+      console.error("Operation field is missing or not a string");
+      return false;
   }
+
+  const validOperations = ["unread", "search", "send", "mailboxes", "accounts"]; // Removed 'list'
+  if (!validOperations.includes(operation)) {
+      console.error(`Invalid operation received: '${operation}'`); // Added logging
+      return false;
+  }
+
+  // Destructure remaining args now that operation is validated
+  const { account, mailbox, limit, searchTerm, fromDate, toDate, to, subject, body, cc, bcc } = restArgs; // Added fromDate, toDate
   
   // Validate required fields based on operation
   switch (operation) {
+    // Removed 'list' case from switch
     case "search":
-      if (!searchTerm || typeof searchTerm !== "string") return false;
+      // Allow empty string for searchTerm, but ensure it's provided and is a string
+      if (searchTerm === undefined || typeof searchTerm !== "string") return false;
       break;
     case "send":
       if (!to || typeof to !== "string" || 
@@ -1213,9 +1238,12 @@ function isMailArgs(args: unknown): args is {
   }
   
   // Validate field types if present
+  // Validate common optional field types
   if (account && typeof account !== "string") return false;
   if (mailbox && typeof mailbox !== "string") return false;
   if (limit && typeof limit !== "number") return false;
+  if (fromDate && typeof fromDate !== "string") return false; // Added
+  if (toDate && typeof toDate !== "string") return false;     // Added
   if (cc && typeof cc !== "string") return false;
   if (bcc && typeof bcc !== "string") return false;
   
