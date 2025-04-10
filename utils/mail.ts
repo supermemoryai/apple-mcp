@@ -310,6 +310,7 @@ async function searchMails(
   fromDate?: string, // Added fromDate
   toDate?: string,   // Added toDate
   limit = 10,
+  maxMailboxes?: number, // Added maxMailboxes
 ): Promise<EmailMessage[]> {
   try {
     if (!(await checkMailAccess())) {
@@ -479,7 +480,7 @@ end if`);
     // JXA approach as fallback (Re-enabled and updated)
     console.error("AppleScript failed or returned no results, trying JXA fallback...");
     const searchResults: EmailMessage[] = await run(
-      (searchTerm: string, accountName: string | undefined, mailboxName: string | undefined, fromDateStr: string | undefined, toDateStr: string | undefined, limit: number) => {
+      (searchTerm: string, accountName: string | undefined, mailboxName: string | undefined, fromDateStr: string | undefined, toDateStr: string | undefined, limit: number, maxMailboxes: number | undefined) => { // Added maxMailboxes
         const Mail = Application("Mail");
         Mail.includeStandardAdditions = true; // Needed for potential dialogs/logging
         const results: { // Use intermediate type for easier sorting
@@ -536,15 +537,19 @@ end if`);
           // console.log(`JXA: Found ${mailboxesToSearch.length} mailboxes to search.`);
 
           // Process messages and add to results incrementally, stopping when limit is reached
-          outerLoop: for (const mailbox of mailboxesToSearch) {
+          // Limit the number of mailboxes to search if maxMailboxes is provided
+          const mailboxesToActuallySearch = (maxMailboxes && maxMailboxes > 0) ? mailboxesToSearch.slice(0, maxMailboxes) : mailboxesToSearch;
+          // console.log(`JXA: Will search ${mailboxesToActuallySearch.length} mailboxes (max: ${maxMailboxes})`);
+
+          outerLoop: for (const mailbox of mailboxesToActuallySearch) { // Use limited list
             try {
               let query: any = null;
-              // Build the 'whose' query based on searchTerm
+              // Build the 'whose' query based on searchTerm (SUBJECT and SENDER only for performance)
               if (searchTerm && searchTerm.trim() !== "") {
                  query = {
                    _or: [
                      { subject: { _contains: searchTerm } },
-                     { content: { _contains: searchTerm } },
+                     // { content: { _contains: searchTerm } }, // REMOVED for performance
                      { sender: { _contains: searchTerm } },
                    ],
                  };

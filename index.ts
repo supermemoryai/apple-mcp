@@ -599,9 +599,10 @@ end tell`;
                     args.searchTerm,
                     args.account,
                     args.mailbox,
-                    args.fromDate, // Pass fromDate
-                    args.toDate,   // Pass toDate
-                    args.limit
+                    args.fromDate,
+                    args.toDate,
+                    args.limit, // Correct order: limit first
+                    args.maxMailboxes // Correct order: maxMailboxes after limit
                 );
                 return {
                   content: [{ 
@@ -1187,13 +1188,14 @@ function isMessagesArgs(args: unknown): args is {
 }
 
 function isMailArgs(args: unknown): args is {
-  operation: "unread" | "search" | "send" | "mailboxes" | "accounts"; // Removed 'list'
+  operation: "unread" | "search" | "send" | "mailboxes" | "accounts";
   account?: string;
   mailbox?: string;
   limit?: number;
   searchTerm?: string;
-  fromDate?: string; // Added
-  toDate?: string;   // Added
+  fromDate?: string;
+  toDate?: string;
+  maxMailboxes?: number; // Added
   to?: string;
   subject?: string;
   body?: string;
@@ -1216,7 +1218,7 @@ function isMailArgs(args: unknown): args is {
   }
 
   // Destructure remaining args now that operation is validated
-  const { account, mailbox, limit, searchTerm, fromDate, toDate, to, subject, body, cc, bcc } = restArgs; // Added fromDate, toDate
+  const { account, mailbox, limit, searchTerm, fromDate, toDate, maxMailboxes, to, subject, body, cc, bcc } = restArgs; // Added maxMailboxes
   
   // Validate required fields based on operation
   switch (operation) {
@@ -1242,8 +1244,9 @@ function isMailArgs(args: unknown): args is {
   if (account && typeof account !== "string") return false;
   if (mailbox && typeof mailbox !== "string") return false;
   if (limit && typeof limit !== "number") return false;
-  if (fromDate && typeof fromDate !== "string") return false; // Added
-  if (toDate && typeof toDate !== "string") return false;     // Added
+  if (fromDate && typeof fromDate !== "string") return false;
+  if (toDate && typeof toDate !== "string") return false;
+  if (maxMailboxes && typeof maxMailboxes !== "number") return false; // Added
   if (cc && typeof cc !== "string") return false;
   if (bcc && typeof bcc !== "string") return false;
   
