@@ -6,6 +6,10 @@ let foldersCache: { [folderName: string]: any } = {};
 let foldersCacheTimestamp: number = 0;
 const CACHE_TTL = 60000; // 1 minute cache validity
 
+// Cache for notes to reduce JXA calls
+let notesCache: { [folderName: string]: { notes: Note[], timestamp: number } } = {};
+const NOTES_CACHE_TTL = 30000; // 30 seconds cache validity
+
 type Note = {
     name: string;
     content: string;
@@ -24,13 +28,20 @@ type CreateNoteResult = {
     message?: string;
 };
   
-// Reset cache periodically to avoid stale data
+// Reset caches periodically to avoid stale data
 function resetCacheIfNeeded() {
     const now = Date.now();
     if (now - foldersCacheTimestamp > CACHE_TTL) {
         foldersCache = {};
         foldersCacheTimestamp = 0;
     }
+    
+    // Reset notes cache for expired entries
+    Object.keys(notesCache).forEach(folderName => {
+        if (now - notesCache[folderName].timestamp > NOTES_CACHE_TTL) {
+            delete notesCache[folderName];
+        }
+    });
 }
 
 // Get all folders once and cache them
@@ -74,6 +85,25 @@ async function getFolder(folderName: string) {
     return folders[folderName] || null;
 }
 
+// Get notes from cache or fetch them
+async function getNotesFromCache(folderName: string): Promise<Note[]> {
+    resetCacheIfNeeded();
+    
+    if (notesCache[folderName] && notesCache[folderName].timestamp > 0) {
+        return notesCache[folderName].notes;
+    }
+    
+    const result = await getNotesFromFolder(folderName);
+    if (result.success && result.notes) {
+        notesCache[folderName] = {
+            notes: result.notes,
+            timestamp: Date.now()
+        };
+        return result.notes;
+    }
+    return [];
+}
+
 async function getAllNotes() {
     try {
         const notes: Note[] = await run(() => {
@@ -99,6 +129,18 @@ async function getAllNotes() {
 
 async function findNote(searchText: string) {
     try {
+        // First try to find in cached notes
+        const allCachedNotes = Object.values(notesCache).flatMap(cache => cache.notes);
+        const cachedMatches = allCachedNotes.filter(note => 
+            note.name.toLowerCase().includes(searchText.toLowerCase()) ||
+            note.content.toLowerCase().includes(searchText.toLowerCase())
+        );
+        
+        if (cachedMatches.length > 0) {
+            return cachedMatches;
+        }
+        
+        // If not found in cache, perform JXA search
         const notes: Note[] = await run((searchText: string) => {
             const Notes = Application('Notes');
             const notes = Notes.notes.whose({
@@ -115,23 +157,13 @@ async function findNote(searchText: string) {
         }, searchText);
         
         if (notes.length === 0) {
-            const allNotes = await getAllNotes();
-            const closestMatch = allNotes.find(({ name }) =>
-                name.toLowerCase().includes(searchText.toLowerCase())
+            // Try fuzzy search in cached notes
+            const fuzzyMatches = allCachedNotes.filter(note => 
+                note.name.toLowerCase().includes(searchText.toLowerCase())
             );
             
-            if (closestMatch) {
-                // If we found a match by name, fetch the full content just for this note
-                const fullContent = await run((noteName: string) => {
-                    const Notes = Application('Notes');
-                    const note = Notes.notes.whose({ name: { _equals: noteName } })()[0];
-                    return note ? note.plaintext() : '';
-                }, closestMatch.name);
-                
-                return [{
-                    name: closestMatch.name,
-                    content: fullContent || closestMatch.content
-                }];
+            if (fuzzyMatches.length > 0) {
+                return fuzzyMatches;
             }
             
             return [];
@@ -279,85 +311,72 @@ async function createNote(title: string, body: string, folderName: string = 'Cla
 
 async function getNotesFromFolder(folderName: string): Promise<{ success: boolean; notes?: Note[]; message?: string }> {
     try {
-        // Try to get folder from cache first
+        // Try to get from cache first
+        const cachedNotes = await getNotesFromCache(folderName);
+        if (cachedNotes.length > 0) {
+            return {
+                success: true,
+                notes: cachedNotes
+            };
+        }
+        
+        // If not in cache, try to get folder from cache
         const targetFolder = await getFolder(folderName);
         
         if (!targetFolder) {
-            const result = await run((folderName: string) => {
-                const Notes = Application('Notes');
-                const folders = Notes.folders();
-                
-                // Find the specified folder
-                let targetFolder = null;
-                for (let i = 0; i < folders.length; i++) {
-                    if (folders[i].name() === folderName) {
-                        targetFolder = folders[i];
-                        break;
-                    }
-                }
-                
-                if (!targetFolder) {
-                    return {
-                        success: false,
-                        message: `Folder "${folderName}" not found`
-                    };
-                }
-                
-                // Get notes from the folder - only fetch previews initially
-                const folderNotes = targetFolder.notes();
-                
-                return {
-                    success: true,
-                    notes: folderNotes.map((note: any) => {
-                        const content = note.plaintext();
-                        return {
-                            name: note.name(),
-                            content: content.length > 500 ? content.substring(0, 500) + '...' : content
-                        };
-                    })
-                };
-            }, folderName);
-            
-            return result;
-        } else {
-            // If found in cache, use it directly
-            const result = await run((folderName: string) => {
-                const Notes = Application('Notes');
-                const folders = Notes.folders();
-                
-                // Find the specified folder
-                let targetFolder = null;
-                for (let i = 0; i < folders.length; i++) {
-                    if (folders[i].name() === folderName) {
-                        targetFolder = folders[i];
-                        break;
-                    }
-                }
-                
-                if (!targetFolder) {
-                    return {
-                        success: false,
-                        message: `Folder "${folderName}" not found`
-                    };
-                }
-                
-                // Get notes from the folder - only fetch previews initially
-                const folderNotes = targetFolder.notes();
-                
-                return {
-                    success: true,
-                    notes: folderNotes.map((note: any) => {
-                        const content = note.plaintext();
-                        return {
-                            name: note.name(),
-                            content: content.length > 500 ? content.substring(0, 500) + '...' : content
-                        };
-                    })
-                };
-            }, folderName);
-            
-            return result;
+            return {
+                success: false,
+                message: `Folder "${folderName}" not found`
+            };
         }
+        
+        // Get notes from the folder with optimized content fetching
+        const result = await run((folderName: string) => {
+            const Notes = Application('Notes');
+            const folders = Notes.folders();
+            
+            // Find the specified folder
+            let targetFolder = null;
+            for (let i = 0; i < folders.length; i++) {
+                if (folders[i].name() === folderName) {
+                    targetFolder = folders[i];
+                    break;
+                }
+            }
+            
+            if (!targetFolder) {
+                return {
+                    success: false,
+                    message: `Folder "${folderName}" not found`
+                };
+            }
+            
+            // Get notes from the folder with optimized content fetching
+            const folderNotes = targetFolder.notes();
+            
+            return {
+                success: true,
+                notes: folderNotes.map((note: any) => {
+                    const content = note.plaintext();
+                    return {
+                        name: note.name(),
+                        content: content.length > 500 ? content.substring(0, 500) + '...' : content,
+                        creationDate: note.creationDate(),
+                        modificationDate: note.modificationDate()
+                    };
+                })
+            };
+        }, folderName);
+        
+        // Update cache if successful
+        if (result.success && result.notes) {
+            notesCache[folderName] = {
+                notes: result.notes,
+                timestamp: Date.now()
+            };
+        }
+        
+        return result;
     } catch (error) {
         return {
             success: false,
@@ -368,9 +387,23 @@ async function getNotesFromFolder(folderName: string): Promise<{ success: boolea
 
 async function getRecentNotesFromFolder(folderName: string, limit: number = 5): Promise<{ success: boolean; notes?: Note[]; message?: string }> {
     try {
-        // Try to use cached folder first
-        const folder = await getFolder(folderName);
+        // Try to get from cache first
+        const cachedNotes = await getNotesFromCache(folderName);
+        if (cachedNotes.length > 0) {
+            // Sort by creation date (newest first)
+            const sortedNotes = [...cachedNotes].sort((a, b) => {
+                const dateA = a.creationDate ? new Date(a.creationDate).getTime() : 0;
+                const dateB = b.creationDate ? new Date(b.creationDate).getTime() : 0;
+                return dateB - dateA;
+            });
+            
+            return {
+                success: true,
+                notes: sortedNotes.slice(0, limit)
+            };
+        }
         
+        // If not in cache, perform JXA operation
         const result = await run((folderName: string, limit: number) => {
             const Notes = Application('Notes');
             const folders = Notes.folders();
@@ -391,22 +424,25 @@ async function getRecentNotesFromFolder(folderName: string, limit: number = 5): 
                 };
             }
             
-            // Get notes from the folder
+            // Get notes from the folder with optimized content fetching
             const folderNotes = targetFolder.notes();
             
-            // Map notes with creation date, only fetch previews
+            // Map notes with creation date and content preview
             const notesWithDate = folderNotes.map((note: any) => {
                 const content = note.plaintext();
                 return {
                     name: note.name(),
                     content: content.length > 500 ? content.substring(0, 500) + '...' : content,
-                    creationDate: note.creationDate()
+                    creationDate: note.creationDate(),
+                    modificationDate: note.modificationDate()
                 };
             });
             
             // Sort by creation date (newest first)
             notesWithDate.sort((a: any, b: any) => {
-                return new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime();
+                const dateA = a.creationDate ? new Date(a.creationDate).getTime() : 0;
+                const dateB = b.creationDate ? new Date(b.creationDate).getTime() : 0;
+                return dateB - dateA;
             });
             
             // Return only the specified number of notes
@@ -417,6 +453,14 @@ async function getRecentNotesFromFolder(folderName: string, limit: number = 5): 
                 notes: limitedNotes
             };
         }, folderName, limit);
+        
+        // Update cache if successful
+        if (result.success && result.notes) {
+            notesCache[folderName] = {
+                notes: result.notes,
+                timestamp: Date.now()
+            };
+        }
         
         return result;
     } catch (error) {
