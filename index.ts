@@ -28,6 +28,7 @@ let reminders: typeof import('./utils/reminders').default | null = null;
 let webSearch: typeof import('./utils/webSearch').default | null = null;
 let calendar: typeof import('./utils/calendar').default | null = null;
 let maps: typeof import('./utils/maps').default | null = null;
+let photos: typeof import('./utils/photos').default | null = null;
 
 // Type map for module names to their types
 type ModuleMap = {
@@ -39,10 +40,11 @@ type ModuleMap = {
   webSearch: typeof import('./utils/webSearch').default;
   calendar: typeof import('./utils/calendar').default;
   maps: typeof import('./utils/maps').default;
+  photos: typeof import('./utils/photos').default;
 };
 
 // Helper function for lazy module loading
-async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 'reminders' | 'webSearch' | 'calendar' | 'maps'>(moduleName: T): Promise<ModuleMap[T]> {
+async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 'reminders' | 'webSearch' | 'calendar' | 'maps' | 'photos'>(moduleName: T): Promise<ModuleMap[T]> {
   if (safeModeFallback) {
     console.error(`Loading ${moduleName} module on demand (safe mode)...`);
   }
@@ -73,6 +75,9 @@ async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 
       case 'maps':
         if (!maps) maps = (await import('./utils/maps')).default;
         return maps as ModuleMap[T];
+      case 'photos':
+        if (!photos) photos = (await import('./utils/photos')).default;
+        return photos as ModuleMap[T];
       default:
         throw new Error(`Unknown module: ${moduleName}`);
     }
@@ -96,6 +101,8 @@ loadingTimeout = setTimeout(() => {
   reminders = null;
   webSearch = null;
   calendar = null;
+  maps = null;
+  photos = null;
   
   // Proceed with server setup
   initServer();
@@ -131,6 +138,9 @@ async function attemptEagerLoading() {
     maps = (await import('./utils/maps')).default;
     console.error("- Maps module loaded successfully");
     
+    photos = (await import('./utils/photos')).default;
+    console.error("- Photos module loaded successfully");
+    
     // If we get here, clear the timeout and proceed with eager loading
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
@@ -162,6 +172,7 @@ async function attemptEagerLoading() {
     webSearch = null;
     calendar = null;
     maps = null;
+    photos = null;
     
     // Initialize the server in safe mode
     initServer();
@@ -1033,6 +1044,227 @@ end tell`;
           }
         }
 
+        case "photos": {
+          if (!isPhotosArgs(args)) {
+            throw new Error("Invalid arguments for photos tool");
+          }
+          
+          try {
+            const photosModule = await loadModule("photos");
+            const { operation } = args;
+            
+            switch (operation) {
+              case "albums": {
+                const albums = await photosModule.getAllAlbums();
+                return {
+                  content: [{
+                    type: "text",
+                    text: albums.length > 0 ? 
+                      `Found ${albums.length} albums:\n\n${albums.map(album => album.name).join("\n")}` : 
+                      "No albums found in Photos."
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "albumPhotos": {
+                if (!args.albumName) {
+                  throw new Error("Album name is required for albumPhotos operation");
+                }
+                
+                const photos = await photosModule.getPhotosFromAlbum(args.albumName, args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} photos in album "${args.albumName}":\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      `No photos found in album "${args.albumName}" or album doesn't exist.`
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "search": {
+                if (!args.searchText) {
+                  throw new Error("Search text is required for search operation");
+                }
+                
+                const photos = await photosModule.searchPhotosByText(args.searchText, args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} photos matching "${args.searchText}":\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      `No photos found matching "${args.searchText}".`
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "dateRange": {
+                if (!args.startDate || !args.endDate) {
+                  throw new Error("Start date and end date are required for dateRange operation");
+                }
+                
+                const photos = await photosModule.searchPhotosByDateRange(args.startDate, args.endDate, args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} photos between ${new Date(args.startDate).toLocaleDateString()} and ${new Date(args.endDate).toLocaleDateString()}:\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      `No photos found between ${new Date(args.startDate).toLocaleDateString()} and ${new Date(args.endDate).toLocaleDateString()}.`
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "favorites": {
+                const photos = await photosModule.getFavoritePhotos(args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} favorite photos:\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      "No favorite photos found."
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "memories": {
+                const memories = await photosModule.getMemories(args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: memories.length > 0 ? 
+                      `Found ${memories.length} memory collections:\n\n${memories.map(memory => 
+                        `${memory.title} (${new Date(memory.date).toLocaleDateString()}) - ${memory.photos.length} photos`
+                      ).join("\n")}` : 
+                      "No memory collections found."
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "recent": {
+                const limit = args.limit || 20;
+                const photos = await photosModule.getRecentPhotos(limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} recent photos:\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      "No recent photos found."
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "export": {
+                if (!args.photoId || !args.outputPath) {
+                  throw new Error("Photo ID and output path are required for export operation");
+                }
+                
+                const result = await photosModule.exportPhoto(args.photoId, args.outputPath);
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.success ? 
+                      `Photo exported successfully to ${result.path}` : 
+                      `Failed to export photo: ${result.message}`
+                  }],
+                  isError: !result.success
+                };
+              }
+              
+              case "open": {
+                if (!args.photoId) {
+                  throw new Error("Photo ID is required for open operation");
+                }
+                
+                const result = await photosModule.openPhoto(args.photoId);
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.success ? 
+                      result.message : 
+                      `Failed to open photo: ${result.message}`
+                  }],
+                  isError: !result.success
+                };
+              }
+              
+              case "people": {
+                const people = await photosModule.getPeople();
+                return {
+                  content: [{
+                    type: "text",
+                    text: people.length > 0 ? 
+                      `Found ${people.length} people in Photos:\n\n${people.join("\n")}` : 
+                      "No people found in Photos."
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "personPhotos": {
+                if (!args.personName) {
+                  throw new Error("Person name is required for personPhotos operation");
+                }
+                
+                const photos = await photosModule.getPhotosByPerson(args.personName, args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} photos of ${args.personName}:\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      `No photos found of ${args.personName}.`
+                  }],
+                  isError: false
+                };
+              }
+              
+              case "screenshots": {
+                const photos = await photosModule.findScreenshots(args.limit);
+                return {
+                  content: [{
+                    type: "text",
+                    text: photos.length > 0 ? 
+                      `Found ${photos.length} screenshots:\n\n${photos.map(photo => 
+                        `${photo.filename} (${photo.date ? new Date(photo.date).toLocaleString() : 'No date'})`
+                      ).join("\n")}` : 
+                      "No screenshots found in Photos."
+                  }],
+                  isError: false
+                };
+              }
+              
+              default:
+                throw new Error(`Unknown photos operation: ${operation}`);
+            }
+          } catch (error) {
+            return {
+              content: [{
+                type: "text",
+                text: `Error in photos tool: ${error instanceof Error ? error.message : String(error)}`
+              }],
+              isError: true
+            };
+          }
+        }
+
         default:
           return {
             content: [{ type: "text", text: `Unknown tool: ${name}` }],
@@ -1395,6 +1627,80 @@ function isMapsArgs(args: unknown): args is {
   if (operation === "addToGuide") {
     const { address, guideName } = args as { address?: unknown; guideName?: unknown };
     if (typeof address !== "string" || address === "" || typeof guideName !== "string" || guideName === "") {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isPhotosArgs(args: unknown): args is {
+  operation: "albums" | "albumPhotos" | "search" | "dateRange" | "favorites" | 
+            "memories" | "recent" | "export" | "open" | "people" | "personPhotos" | "screenshots";
+  albumName?: string;
+  searchText?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  photoId?: string;
+  outputPath?: string;
+  personName?: string;
+} {
+  if (typeof args !== "object" || args === null) {
+    return false;
+  }
+
+  const { operation } = args as { operation?: unknown };
+  if (typeof operation !== "string") {
+    return false;
+  }
+
+  if (!["albums", "albumPhotos", "search", "dateRange", "favorites", "memories", 
+       "recent", "export", "open", "people", "personPhotos", "screenshots"].includes(operation)) {
+    return false;
+  }
+
+  // Check that required parameters are present for each operation
+  if (operation === "albumPhotos") {
+    const { albumName } = args as { albumName?: unknown };
+    if (typeof albumName !== "string" || albumName === "") {
+      return false;
+    }
+  }
+
+  if (operation === "search") {
+    const { searchText } = args as { searchText?: unknown };
+    if (typeof searchText !== "string" || searchText === "") {
+      return false;
+    }
+  }
+
+  if (operation === "dateRange") {
+    const { startDate, endDate } = args as { startDate?: unknown; endDate?: unknown };
+    if (typeof startDate !== "string" || startDate === "" || 
+        typeof endDate !== "string" || endDate === "") {
+      return false;
+    }
+  }
+
+  if (operation === "export") {
+    const { photoId, outputPath } = args as { photoId?: unknown; outputPath?: unknown };
+    if (typeof photoId !== "string" || photoId === "" || 
+        typeof outputPath !== "string" || outputPath === "") {
+      return false;
+    }
+  }
+
+  if (operation === "open") {
+    const { photoId } = args as { photoId?: unknown };
+    if (typeof photoId !== "string" || photoId === "") {
+      return false;
+    }
+  }
+
+  if (operation === "personPhotos") {
+    const { personName } = args as { personName?: unknown };
+    if (typeof personName !== "string" || personName === "") {
       return false;
     }
   }
