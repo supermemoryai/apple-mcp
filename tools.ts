@@ -305,6 +305,54 @@ const MAPS_TOOL: Tool = {
   }
 };
 
-const tools = [CONTACTS_TOOL, NOTES_TOOL, MESSAGES_TOOL, MAIL_TOOL, REMINDERS_TOOL, WEB_SEARCH_TOOL, CALENDAR_TOOL, MAPS_TOOL];
+const PHOTOS_TOOL: Tool = {
+  name: "photos",
+  description: "Search, browse, and manage photos in Apple Photos app",
+  inputSchema: {
+    type: "object",
+    properties: {
+      operation: {
+        type: "string",
+        description: "Operation to perform with Photos",
+        enum: ["albums", "albumPhotos", "search", "dateRange", "favorites", "memories", "recent", "export", "open", "people", "personPhotos", "screenshots"]
+      },
+      albumName: {
+        type: "string",
+        description: "Name of the album to get photos from (required for albumPhotos operation)"
+      },
+      searchText: {
+        type: "string",
+        description: "Text to search for in photo filenames, descriptions, or keywords (required for search operation)"
+      },
+      startDate: {
+        type: "string",
+        description: "Start date in ISO format (required for dateRange operation)"
+      },
+      endDate: {
+        type: "string",
+        description: "End date in ISO format (required for dateRange operation)"
+      },
+      limit: {
+        type: "number",
+        description: "Maximum number of results to return (optional)"
+      },
+      photoId: {
+        type: "string",
+        description: "ID of the photo to export or open (required for export and open operations)"
+      },
+      outputPath: {
+        type: "string",
+        description: "Path to save the exported photo (required for export operation)"
+      },
+      personName: {
+        type: "string",
+        description: "Name of the person to search for photos of (required for personPhotos operation)"
+      }
+    },
+    required: ["operation"]
+  }
+};
+
+const tools = [CONTACTS_TOOL, NOTES_TOOL, MESSAGES_TOOL, MAIL_TOOL, REMINDERS_TOOL, WEB_SEARCH_TOOL, CALENDAR_TOOL, MAPS_TOOL, PHOTOS_TOOL];
 
 export default tools;

@@ -234,8 +234,9 @@ async function createReminder(
       }
 
       // Create the reminder
-      const newReminder = list.make({
+      const newReminder = Reminders.make({
         new: "reminder",
+        at: list,
         withProperties: reminderProps,
       });
 
