@@ -1,6 +1,14 @@
 import { run } from '@jxa/run';
 import { runAppleScript } from 'run-applescript';
 import { validateContactName, validatePhoneNumber, escapeForLogging } from './ValidationUtils';
+import { getContactCache } from './ContactCache';
+import type { ContactsData } from './ContactCache';
+
+// Type for phone search result from JXA
+interface PhoneSearchResult {
+    name: string;
+    phones: string[];
+}
 
 async function checkContactsAccess(): Promise<boolean> {
     try {
@@ -72,14 +80,24 @@ end tell`;
     }
 }
 
-async function getAllNumbers() {
+async function getAllNumbers(): Promise<ContactsData> {
     try {
         console.error("Starting getAllNumbers...");
+        
+        // Check cache first
+        const cache = getContactCache();
+        const cachedData = cache.get('allContacts');
+        if (cachedData) {
+            console.error(`Cache hit! Using cached data with ${Object.keys(cachedData).length} contacts.`);
+            return cachedData;
+        }
+        
         if (!await checkContactsAccess()) {
             return {};
         }
 
         // Try JXA first, fallback to AppleScript if it fails
+        let contactsData: ContactsData = {};
         try {
             console.error("Running JXA script to get all contacts...");
             const nums: { [key: string]: string[] } = await run(() => {
@@ -116,18 +134,25 @@ async function getAllNumbers() {
             });
 
             console.error(`JXA getAllNumbers completed. Found ${Object.keys(nums).length} contacts with phone numbers.`);
+            contactsData = nums;
             
             // If JXA returns empty results, try AppleScript fallback
             if (Object.keys(nums).length === 0) {
                 console.error("JXA returned empty results, trying AppleScript fallback...");
-                return await getAllNumbersAppleScript();
+                contactsData = await getAllNumbersAppleScript();
             }
-            
-            return nums;
         } catch (jxaError) {
             console.error("JXA failed, trying AppleScript fallback:", jxaError);
-            return await getAllNumbersAppleScript();
+            contactsData = await getAllNumbersAppleScript();
         }
+
+        // Cache the results
+        if (Object.keys(contactsData).length > 0) {
+            cache.set(contactsData, 'allContacts');
+            console.error(`Cached ${Object.keys(contactsData).length} contacts for future use.`);
+        }
+        
+        return contactsData;
     } catch (error) {
         console.error("Error in getAllNumbers:", error);
         throw new Error(`Error accessing contacts: ${error instanceof Error ? error.message : String(error)}`);
@@ -207,7 +232,20 @@ async function findNumber(name: string) {
 async function findNumberFuzzyFallback(sanitizedName: string): Promise<string[]> {
     try {
         console.error("Running fuzzy search fallback...");
-        const allNumbers = await getAllNumbers();
+        
+        // Try cache first for fuzzy search
+        const cache = getContactCache();
+        const cachedData = cache.get('allContacts');
+        
+        let allNumbers: ContactsData;
+        if (cachedData) {
+            console.error("Using cached data for fuzzy search");
+            allNumbers = cachedData;
+        } else {
+            console.error("No cached data, loading fresh data for fuzzy search");
+            allNumbers = await getAllNumbers();
+        }
+        
         const closestMatch = Object.keys(allNumbers).find(personName => 
             personName.toLowerCase().includes(sanitizedName.toLowerCase())
         );
@@ -219,39 +257,177 @@ async function findNumberFuzzyFallback(sanitizedName: string): Promise<string[]>
     }
 }
 
-async function findContactByPhone(phoneNumber: string): Promise<string | null> {
+/**
+ * Normalize phone number for comparison by removing formatting characters
+ * This handles common phone number formats and international numbers
+ */
+function normalizePhoneNumber(phoneNumber: string): string[] {
+    // Remove all non-digit and non-plus characters
+    const cleaned = phoneNumber.replace(/[^0-9+]/g, '');
+    
+    // Generate various normalized formats for comparison
+    const formats: string[] = [cleaned];
+    
+    // Add format without country code if it starts with +1
+    if (cleaned.startsWith('+1')) {
+        formats.push(cleaned.substring(2));
+    }
+    
+    // Add format with +1 if it doesn't start with + and looks like US number
+    if (!cleaned.startsWith('+') && cleaned.length === 10) {
+        formats.push(`+1${cleaned}`);
+    }
+    
+    // Add format with just + prefix
+    if (!cleaned.startsWith('+') && cleaned.length > 0) {
+        formats.push(`+${cleaned}`);
+    }
+    
+    return [...new Set(formats)]; // Remove duplicates
+}
+
+/**
+ * Optimized function to find contact by phone number using cache-first approach
+ * Checks cache first for fast lookup, falls back to direct JXA search only when needed
+ */
+async function findContactByPhoneOptimized(phoneNumber: string): Promise<string | null> {
     try {
         // Validate and sanitize input
         const sanitizedPhoneNumber = validatePhoneNumber(phoneNumber);
-        console.error(`Starting findContactByPhone for: ${escapeForLogging(sanitizedPhoneNumber)}`);
+        console.error(`Starting optimized findContactByPhone for: ${escapeForLogging(sanitizedPhoneNumber)}`);
         
         if (!await checkContactsAccess()) {
             return null;
         }
 
-        // Normalize the phone number for comparison
-        const searchNumber = sanitizedPhoneNumber.replace(/[^0-9+]/g, '');
+        // Get normalized phone number formats for comparison
+        const searchNumbers = normalizePhoneNumber(sanitizedPhoneNumber);
+        console.error(`Searching for phone numbers: ${searchNumbers.join(', ')}`);
+
+        // Try cache first (fast lookup)
+        console.error("Checking cache for phone search...");
+        const cacheResult = await findContactByPhoneCachedSearch(searchNumbers);
+        if (cacheResult) {
+            console.error(`Cache hit! Found contact: ${cacheResult}`);
+            return cacheResult;
+        }
+
+        // Cache miss - fallback to direct JXA search (slower but comprehensive)
+        console.error("Cache miss, falling back to direct JXA search...");
+        try {
+            console.error("Running direct JXA phone search...");
+            const foundContact: PhoneSearchResult | null = await run((searchFormats: string[]) => {
+                const Contacts = Application('Contacts');
+                const people = Contacts.people();
+                
+                console.log(`Searching ${people.length} contacts for phone numbers: ${searchFormats.join(', ')}`);
+                
+                for (let i = 0; i < people.length; i++) {
+                    try {
+                        const person = people[i];
+                        const phones = person.phones();
+                        
+                        // Check each phone number for this contact
+                        for (let j = 0; j < phones.length; j++) {
+                            const phoneValue = phones[j].value();
+                            const normalizedPhone = phoneValue.replace(/[^0-9+]/g, '');
+                            
+                            // Check if any of our search formats match this phone number
+                            for (const searchNumber of searchFormats) {
+                                if (normalizedPhone === searchNumber || 
+                                    normalizedPhone === `+${searchNumber}` || 
+                                    normalizedPhone === `+1${searchNumber}` ||
+                                    `+1${normalizedPhone}` === searchNumber) {
+                                    
+                                    const personName = person.name();
+                                    console.log(`Found match: ${personName} has phone ${phoneValue}`);
+                                    
+                                    // Return both the name and all phone numbers for caching
+                                    const allPhones = phones.map((phone: any) => phone.value());
+                                    return { name: personName, phones: allPhones };
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`Error processing contact ${i}:`, error);
+                        // Skip contacts that can't be processed
+                    }
+                }
+                
+                console.log("No matching contact found via direct search");
+                return null;
+            }, searchNumbers);
+
+            if (foundContact && foundContact.name) {
+                console.error(`Direct JXA search found: ${foundContact.name}`);
+                
+                // Cache the successful result for future lookups
+                await cachePhoneSearchResult(foundContact.name, foundContact.phones);
+                
+                return foundContact.name;
+            }
+        } catch (jxaError) {
+            console.error("Direct JXA phone search failed:", jxaError);
+        }
+
+        console.error("No contact found via any search method");
+        return null;
         
-        // Get all contacts and their numbers
-        const allContacts = await getAllNumbers();
+    } catch (error) {
+        console.error("Error in findContactByPhoneOptimized:", error);
+        return null;
+    }
+}
+
+/**
+ * Cache-only phone search - only searches existing cached data
+ * Returns null if no cache exists or no match found in cache
+ */
+async function findContactByPhoneCachedSearch(searchNumbers: string[]): Promise<string | null> {
+    try {
+        // Only search cache - don't load fresh data if cache is empty
+        const cache = getContactCache();
+        const allContacts = cache.get('allContacts');
         
-        // Look for a match
+        if (!allContacts) {
+            console.error("No cached contacts available for search");
+            return null;
+        }
+        
+        console.error("Searching cached contacts...");
+        
+        // Look for a match in cached data
         for (const [name, numbers] of Object.entries(allContacts)) {
             const normalizedNumbers = numbers.map(num => num.replace(/[^0-9+]/g, ''));
-            if (normalizedNumbers.some(num => 
-                num === searchNumber || 
-                num === `+${searchNumber}` || 
-                num === `+1${searchNumber}` ||
-                `+1${num}` === searchNumber
-            )) {
-                return name;
+            
+            // Check if any cached phone numbers match our search numbers
+            for (const searchNumber of searchNumbers) {
+                if (normalizedNumbers.some(num => 
+                    num === searchNumber || 
+                    num === `+${searchNumber}` || 
+                    num === `+1${searchNumber}` ||
+                    `+1${num}` === searchNumber
+                )) {
+                    console.error(`Found match in cache: ${name}`);
+                    return name;
+                }
             }
         }
 
+        console.error("No match found in cached search");
         return null;
     } catch (error) {
+        console.error("Cached phone search failed:", error);
+        return null;
+    }
+}
+
+async function findContactByPhone(phoneNumber: string): Promise<string | null> {
+    try {
+        // Use the new optimized version
+        return await findContactByPhoneOptimized(phoneNumber);
+    } catch (error) {
         console.error("Error in findContactByPhone:", error);
-        // Return null instead of throwing to handle gracefully
         return null;
     }
 }
@@ -288,4 +464,67 @@ end tell`);
     }
 }
 
-export default { getAllNumbers, findNumber, findContactByPhone, testContactsAccess };
+/**
+ * Get current cache statistics and configuration
+ */
+async function getCacheInfo(): Promise<{ stats: any; config: any }> {
+    const cache = getContactCache();
+    return {
+        stats: cache.getStats(),
+        config: cache.getConfig()
+    };
+}
+
+/**
+ * Manually invalidate the contacts cache
+ */
+async function invalidateCache(): Promise<void> {
+    const cache = getContactCache();
+    cache.invalidate();
+    console.error("Contact cache manually invalidated");
+}
+
+/**
+ * Update cache configuration
+ */
+async function updateCacheConfig(config: any): Promise<void> {
+    const cache = getContactCache();
+    cache.updateConfig(config);
+    console.error("Cache configuration updated");
+}
+
+/**
+ * Cache the result of a successful phone search to improve future lookup performance
+ */
+async function cachePhoneSearchResult(contactName: string, phoneNumbers: string[]): Promise<void> {
+    try {
+        const cache = getContactCache();
+        let existingData = cache.get('allContacts');
+        
+        if (!existingData) {
+            // Create new cache entry with just this contact
+            existingData = {};
+        }
+        
+        // Add or update this contact in the cache
+        existingData[contactName] = phoneNumbers;
+        
+        // Save back to cache
+        cache.set(existingData, 'allContacts');
+        
+        console.error(`📞 Cached phone search result: ${contactName} with ${phoneNumbers.length} phone numbers`);
+    } catch (error) {
+        console.error("Failed to cache phone search result:", error);
+        // Don't throw - caching failure shouldn't break the search
+    }
+}
+
+export default { 
+    getAllNumbers, 
+    findNumber, 
+    findContactByPhone, 
+    testContactsAccess,
+    getCacheInfo,
+    invalidateCache,
+    updateCacheConfig
+};
