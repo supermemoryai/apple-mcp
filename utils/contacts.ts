@@ -1,5 +1,6 @@
 import { run } from '@jxa/run';
 import { runAppleScript } from 'run-applescript';
+import { validateContactName, validatePhoneNumber, escapeForLogging } from './ValidationUtils';
 
 async function checkContactsAccess(): Promise<boolean> {
     try {
@@ -135,72 +136,101 @@ async function getAllNumbers() {
 
 async function findNumber(name: string) {
     try {
-        console.error(`Starting findNumber for: ${name}`);
+        // Validate and sanitize input
+        const sanitizedName = validateContactName(name);
+        console.error(`Starting findNumber for: ${escapeForLogging(sanitizedName)}`);
+        
         if (!await checkContactsAccess()) {
             return [];
         }
 
-        console.error("Running AppleScript to find specific contact...");
-        const script = `
-tell application "Contacts"
-    set phoneList to ""
-    repeat with aPerson in every person
-        try
-            set personName to name of aPerson
-            if personName contains "${name.replace(/"/g, '\\"')}" then
-                set phones to phones of aPerson
-                repeat with aPhone in phones
-                    set phoneValue to value of aPhone
-                    set phoneList to phoneList & phoneValue & ","
-                end repeat
-                if phoneList is not "" then
-                    exit repeat
-                end if
-            end if
-        on error
-            -- skip
-        end try
-    end repeat
-    return phoneList
-end tell`;
+        // Use JXA exclusively to avoid string interpolation vulnerabilities
+        try {
+            console.error("Running secure JXA script to find specific contact...");
+            const phones: string[] = await run((searchName: string) => {
+                const Contacts = Application('Contacts');
+                const people = Contacts.people();
+                
+                console.log(`Searching for contacts matching: ${searchName}`);
+                
+                for (let i = 0; i < people.length; i++) {
+                    try {
+                        const person = people[i];
+                        const personName = person.name();
+                        
+                        // Use JavaScript string methods for safe comparison
+                        if (personName && personName.toLowerCase().includes(searchName.toLowerCase())) {
+                            console.log(`Found matching contact: ${personName}`);
+                            
+                            const phones = person.phones();
+                            const phoneValues = phones.map((phone: any) => phone.value());
+                            
+                            if (phoneValues.length > 0) {
+                                console.log(`Found ${phoneValues.length} phone numbers`);
+                                return phoneValues;
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`Error processing contact ${i}:`, error);
+                        // Skip contacts that can't be processed
+                    }
+                }
+                
+                console.log("No matching contact found");
+                return [];
+            }, sanitizedName);
 
-        const result = await runAppleScript(script);
-        console.error(`findNumber AppleScript result:`, result);
+            console.error(`JXA findNumber completed. Found ${phones.length} phone numbers.`);
 
-        // Parse the result
-        let phones: string[] = [];
-        if (typeof result === 'string' && result.trim()) {
-            phones = result.trim().split(',').filter(phone => phone.trim()).map(phone => phone.trim());
+            // If no exact match found, try fuzzy search as fallback
+            if (phones.length === 0) {
+                console.error("No direct match found, trying fuzzy search...");
+                return await findNumberFuzzyFallback(sanitizedName);
+            }
+
+            return phones;
+        } catch (jxaError) {
+            console.error("JXA findNumber failed:", jxaError);
+            // Fallback to fuzzy search through cached data
+            return await findNumberFuzzyFallback(sanitizedName);
         }
-
-        console.error(`findNumber completed. Found ${phones.length} phone numbers.`);
-
-        // If no numbers found, run getAllNumbers() to find the closest match
-        if (phones.length === 0) {
-            console.error("No exact match found, searching all contacts for partial match...");
-            const allNumbers = await getAllNumbers();
-            const closestMatch = Object.keys(allNumbers).find(personName => 
-                personName.toLowerCase().includes(name.toLowerCase())
-            );
-            console.error(`Closest match: ${closestMatch}`);
-            return closestMatch ? allNumbers[closestMatch] : [];
-        }
-
-        return phones;
     } catch (error) {
         console.error("Error in findNumber:", error);
         throw new Error(`Error finding contact: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
+/**
+ * Fallback fuzzy search using cached contact data
+ * This avoids the performance hit of loading all contacts in the main path
+ */
+async function findNumberFuzzyFallback(sanitizedName: string): Promise<string[]> {
+    try {
+        console.error("Running fuzzy search fallback...");
+        const allNumbers = await getAllNumbers();
+        const closestMatch = Object.keys(allNumbers).find(personName => 
+            personName.toLowerCase().includes(sanitizedName.toLowerCase())
+        );
+        console.error(`Fuzzy search result: ${closestMatch || 'none'}`);
+        return closestMatch ? allNumbers[closestMatch] : [];
+    } catch (error) {
+        console.error("Fuzzy search fallback failed:", error);
+        return [];
+    }
+}
+
 async function findContactByPhone(phoneNumber: string): Promise<string | null> {
     try {
+        // Validate and sanitize input
+        const sanitizedPhoneNumber = validatePhoneNumber(phoneNumber);
+        console.error(`Starting findContactByPhone for: ${escapeForLogging(sanitizedPhoneNumber)}`);
+        
         if (!await checkContactsAccess()) {
             return null;
         }
 
         // Normalize the phone number for comparison
-        const searchNumber = phoneNumber.replace(/[^0-9+]/g, '');
+        const searchNumber = sanitizedPhoneNumber.replace(/[^0-9+]/g, '');
         
         // Get all contacts and their numbers
         const allContacts = await getAllNumbers();
@@ -220,6 +250,7 @@ async function findContactByPhone(phoneNumber: string): Promise<string | null> {
 
         return null;
     } catch (error) {
+        console.error("Error in findContactByPhone:", error);
         // Return null instead of throwing to handle gracefully
         return null;
     }
