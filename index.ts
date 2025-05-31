@@ -28,6 +28,7 @@ let reminders: typeof import('./utils/reminders').default | null = null;
 let webSearch: typeof import('./utils/webSearch').default | null = null;
 let calendar: typeof import('./utils/calendar').default | null = null;
 let maps: typeof import('./utils/maps').default | null = null;
+let music: typeof import('./utils/music').default | null = null;
 
 // Type map for module names to their types
 type ModuleMap = {
@@ -39,10 +40,11 @@ type ModuleMap = {
   webSearch: typeof import('./utils/webSearch').default;
   calendar: typeof import('./utils/calendar').default;
   maps: typeof import('./utils/maps').default;
+  music: typeof import('./utils/music').default;
 };
 
 // Helper function for lazy module loading
-async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 'reminders' | 'webSearch' | 'calendar' | 'maps'>(moduleName: T): Promise<ModuleMap[T]> {
+async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 'reminders' | 'webSearch' | 'calendar' | 'maps' | 'music'>(moduleName: T): Promise<ModuleMap[T]> {
   if (safeModeFallback) {
     console.error(`Loading ${moduleName} module on demand (safe mode)...`);
   }
@@ -73,6 +75,9 @@ async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 
       case 'maps':
         if (!maps) maps = (await import('./utils/maps')).default;
         return maps as ModuleMap[T];
+      case 'music':
+        if (!music) music = (await import('./utils/music')).default;
+        return music as ModuleMap[T];
       default:
         throw new Error(`Unknown module: ${moduleName}`);
     }
@@ -96,6 +101,8 @@ loadingTimeout = setTimeout(() => {
   reminders = null;
   webSearch = null;
   calendar = null;
+  maps = null;
+  music = null;
   
   // Proceed with server setup
   initServer();
@@ -131,6 +138,9 @@ async function attemptEagerLoading() {
     maps = (await import('./utils/maps')).default;
     console.error("- Maps module loaded successfully");
     
+    music = (await import('./utils/music')).default;
+    console.error("- Music module loaded successfully");
+    
     // If we get here, clear the timeout and proceed with eager loading
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
@@ -162,6 +172,7 @@ async function attemptEagerLoading() {
     webSearch = null;
     calendar = null;
     maps = null;
+    music = null;
     
     // Initialize the server in safe mode
     initServer();
@@ -1033,6 +1044,137 @@ end tell`;
           }
         }
 
+        case "music": {
+          if (!isMusicArgs(args)) {
+            throw new Error("Invalid arguments for music tool");
+          }
+
+          try {
+            const musicModule = await loadModule('music');
+            const { operation } = args;
+
+            switch (operation) {
+              case "search": {
+                const { query, type, limit } = args;
+                if (!query) {
+                  throw new Error("Search query is required for search operation");
+                }
+
+                const result = await musicModule.searchMusic(query, type, limit);
+
+                const formatSearchResults = (searchResult: any) => {
+                  let output = `Search results for "${query}":\n\n`;
+
+                  if (searchResult.tracks.length > 0) {
+                    output += `**Tracks:**\n`;
+                    searchResult.tracks.forEach((track: any) => {
+                      output += `• "${track.name}" by ${track.artist} (${track.album})\n`;
+                    });
+                    output += '\n';
+                  }
+
+                  if (searchResult.albums.length > 0) {
+                    output += `**Albums:**\n`;
+                    searchResult.albums.forEach((album: any) => {
+                      output += `• "${album.name}" by ${album.artist}${album.year ? ` (${album.year})` : ''}\n`;
+                    });
+                    output += '\n';
+                  }
+
+                  if (searchResult.artists.length > 0) {
+                    output += `**Artists:**\n`;
+                    searchResult.artists.forEach((artist: any) => {
+                      output += `• ${artist.name}\n`;
+                    });
+                    output += '\n';
+                  }
+
+                  if (searchResult.playlists.length > 0) {
+                    output += `**Playlists:**\n`;
+                    searchResult.playlists.forEach((playlist: any) => {
+                      output += `• "${playlist.name}" (${playlist.trackCount} tracks)\n`;
+                    });
+                  }
+
+                  const totalResults = searchResult.tracks.length + searchResult.albums.length + 
+                                     searchResult.artists.length + searchResult.playlists.length;
+
+                  if (totalResults === 0) {
+                    output = `No music found matching "${query}".`;
+                  }
+
+                  return output.trim();
+                };
+
+                return {
+                  content: [{
+                    type: "text",
+                    text: formatSearchResults(result)
+                  }],
+                  isError: false
+                };
+              }
+
+              case "play": {
+                const { trackName, artistName } = args;
+                if (!trackName) {
+                  throw new Error("Track name is required for play operation");
+                }
+
+                const result = await musicModule.playTrack(trackName, artistName);
+
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.message
+                  }],
+                  isError: !result.success
+                };
+              }
+
+              case "current": {
+                const result = await musicModule.getCurrentTrack();
+
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.message
+                  }],
+                  isError: !result.success
+                };
+              }
+
+              case "control": {
+                const { action } = args;
+                if (!action) {
+                  throw new Error("Action is required for control operation");
+                }
+
+                const result = await musicModule.controlPlayback(action as 'play' | 'pause' | 'next' | 'previous');
+
+                return {
+                  content: [{
+                    type: "text",
+                    text: result.message
+                  }],
+                  isError: !result.success
+                };
+              }
+
+              default:
+                throw new Error(`Unknown music operation: ${operation}`);
+            }
+          } catch (error) {
+            return {
+              content: [{
+                type: "text",
+                text: `Error in music tool: ${error instanceof Error ? error.message : String(error)}`
+              }],
+              isError: true
+            };
+          }
+        }
+
         default:
           return {
             content: [{ type: "text", text: `Unknown tool: ${name}` }],
@@ -1400,4 +1542,21 @@ function isMapsArgs(args: unknown): args is {
   }
 
   return true;
+}
+
+function isMusicArgs(args: unknown): args is {
+  operation: "search" | "play" | "current" | "control";
+  query?: string;
+  type?: "tracks" | "albums" | "artists" | "playlists" | "all";
+  limit?: number;
+  trackName?: string;
+  artistName?: string;
+  action?: "play" | "pause" | "next" | "previous";
+} {
+  return (
+    typeof args === "object" &&
+    args !== null &&
+    typeof (args as { operation: string }).operation === "string" &&
+    ["search", "play", "current", "control"].includes((args as { operation: string }).operation)
+  );
 }
