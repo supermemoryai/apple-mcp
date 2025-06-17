@@ -1,45 +1,33 @@
 {
-  "name": "apple-mcp",
-  "version": "0.2.7",
-  "module": "index.ts",
+  "name": "apple-mcp-demonstration",
+  "version": "1.0.0",
+  "description": "Comprehensive demonstration of Apple MCP server capabilities",
   "type": "module",
-  "description": "Apple MCP tools for contacts, notes, messages, and mail integration",
-  "author": "Dhravya Shah",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dhravya/apple-mcp.git"
-  },
-  "keywords": [
-    "mcp",
-    "apple",
-    "contacts",
-    "notes",
-    "messages",
-    "mail",
-    "claude"
-  ],
-  "bin": {
-    "apple-mcp": "./index.ts"
-  },
+  "main": "apple-mcp-comprehensive-demo.js",
   "scripts": {
-    "dev": "bun run index.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "^22.13.4"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+    "demo": "node apple-mcp-comprehensive-demo.js",
+    "test": "node test-apple-mcp.js"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.8",
-    "@jxa/global-type": "^1.3.6",
-    "@jxa/run": "^1.3.6",
-    "@modelcontextprotocol/sdk": "^1.5.0",
-    "@types/express": "^5.0.0",
-    "mcp-proxy": "^2.4.0",
-    "run-applescript": "^7.0.0",
-    "zod": "^3.24.2"
-  }
+    "@modelcontextprotocol/sdk": "^0.4.0"
+  },
+  "devDependencies": {
+    "@dhravya/apple-mcp": "latest"
+  },
+  "keywords": [
+    "apple",
+    "mcp",
+    "model-context-protocol",
+    "demonstration",
+    "contacts",
+    "notes",
+    "messages", 
+    "mail",
+    "reminders",
+    "calendar",
+    "maps",
+    "web-search"
+  ],
+  "author": "Kilo Code",
+  "license": "MIT"
 }
