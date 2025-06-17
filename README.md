@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/supermemoryai-apple-mcp-badge.png)](https://mseep.ai/app/supermemoryai-apple-mcp)
+
 # Apple MCP tools
 
 [![smithery badge](https://smithery.ai/badge/@Dhravya/apple-mcp)](https://smithery.ai/server/@Dhravya/apple-mcp)
