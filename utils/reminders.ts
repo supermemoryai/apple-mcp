@@ -233,9 +233,10 @@ async function createReminder(
         reminderProps.dueDate = new Date(dueDate);
       }
 
-      // Create the reminder
-      const newReminder = list.make({
+      // Create the reminder at the specified list
+      const newReminder = Reminders.make({
         new: "reminder",
+        at: list,
         withProperties: reminderProps,
       });
 
