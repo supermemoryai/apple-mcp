@@ -83,15 +83,22 @@ npx -y @smithery/cli@latest install @Dhravya/apple-mcp --client cursor
   - Drop pins on the map
   - Create and list guides
   - Add places to guides
+- Music:
+  - Search for songs, albums, artists, and playlists
+  - Play specific tracks by name and artist
+  - Control playback (play, pause, next, previous)
+  - Get current playing track information
 
 - TODO: Search and open photos in Apple Photos app
-- TODO: Search and open music in Apple Music app
 
 
 You can also daisy-chain commands to create a workflow. Like:
 "can you please read the note about people i met in the conference, find their contacts and emails, and send them a message saying thank you for the time."
 
 (it works!)
+
+Or with music:
+"search for some pop music and play a Taylor Swift track"
 
 
 #### Manual installation

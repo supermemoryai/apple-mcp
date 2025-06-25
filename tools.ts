@@ -305,6 +305,48 @@ const MAPS_TOOL: Tool = {
   }
 };
 
-const tools = [CONTACTS_TOOL, NOTES_TOOL, MESSAGES_TOOL, MAIL_TOOL, REMINDERS_TOOL, WEB_SEARCH_TOOL, CALENDAR_TOOL, MAPS_TOOL];
+const MUSIC_TOOL: Tool = {
+  name: "music",
+  description: "Search and control Apple Music - find tracks, albums, artists, playlists in your local library, and control playback",
+  inputSchema: {
+    type: "object",
+    properties: {
+      operation: {
+        type: "string",
+        description: "Operation to perform: 'search', 'play', 'current', or 'control'",
+        enum: ["search", "play", "current", "control"]
+      },
+      query: {
+        type: "string",
+        description: "Search query for music content in your local library (required for search operation)"
+      },
+      type: {
+        type: "string",
+        description: "Type of content to search for (optional for search operation)",
+        enum: ["tracks", "albums", "artists", "playlists", "all"]
+      },
+      limit: {
+        type: "number",
+        description: "Maximum number of results to return per category (optional for search)"
+      },
+      trackName: {
+        type: "string",
+        description: "Name of the track to play (required for play operation)"
+      },
+      artistName: {
+        type: "string",
+        description: "Artist name for more precise track matching (optional for play operation)"
+      },
+      action: {
+        type: "string",
+        description: "Playback control action (required for control operation)",
+        enum: ["play", "pause", "next", "previous"]
+      }
+    },
+    required: ["operation"]
+  }
+};
+
+const tools = [CONTACTS_TOOL, NOTES_TOOL, MESSAGES_TOOL, MAIL_TOOL, REMINDERS_TOOL, WEB_SEARCH_TOOL, CALENDAR_TOOL, MAPS_TOOL, MUSIC_TOOL];
 
 export default tools;
