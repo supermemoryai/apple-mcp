@@ -1,5 +1,8 @@
 # Apple MCP tools
 
+Love this MCP? Check out supermemory MCP too - https://mcp.supermemory.ai
+
+
 [![smithery badge](https://smithery.ai/badge/@Dhravya/apple-mcp)](https://smithery.ai/server/@Dhravya/apple-mcp)
 
 This is a collection of apple-native tools for the [MCP protocol](https://modelcontextprotocol.com/docs/mcp-protocol).
