@@ -80,14 +80,14 @@ const CONTACTS_TOOL: Tool = {
   
   const MAIL_TOOL: Tool = {
     name: "mail",
-    description: "Interact with Apple Mail app - read unread emails, search emails, and send emails",
+    description: "Interact with Apple Mail app - read unread emails, search emails, send emails, list mailboxes/accounts", // Removed 'list recent emails'
     inputSchema: {
       type: "object",
       properties: {
         operation: {
           type: "string",
-          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', or 'accounts'",
-          enum: ["unread", "search", "send", "mailboxes", "accounts"]
+          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', or 'accounts'", // Removed 'list'
+          enum: ["unread", "search", "send", "mailboxes", "accounts"] // Removed 'list'
         },
         account: {
           type: "string",
@@ -103,7 +103,15 @@ const CONTACTS_TOOL: Tool = {
         },
         searchTerm: {
           type: "string",
-          description: "Text to search for in emails (required for search operation)"
+          description: "Text to search for in emails (required for search operation, use empty string \"\" to list recent)"
+        },
+        fromDate: {
+           type: "string",
+           description: "Start date for search range in ISO format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ) (optional)"
+        },
+        toDate: {
+           type: "string",
+           description: "End date for search range in ISO format (optional)"
         },
         to: {
           type: "string",

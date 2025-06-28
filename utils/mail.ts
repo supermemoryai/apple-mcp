@@ -305,7 +305,12 @@ end tell`);
 
 async function searchMails(
   searchTerm: string,
+  accountName?: string,
+  mailboxName?: string,
+  fromDate?: string, // Added fromDate
+  toDate?: string,   // Added toDate
   limit = 10,
+  maxMailboxes?: number, // Added maxMailboxes
 ): Promise<EmailMessage[]> {
   try {
     if (!(await checkMailAccess())) {
@@ -321,36 +326,131 @@ end if`);
 
     // First try the AppleScript approach which might be more reliable
     try {
+      // Escape inputs
+      const escapedSearchTerm = searchTerm.replace(/"/g, '\\"');
+      const escapedAccount = accountName?.replace(/"/g, '\\"');
+      const escapedMailbox = mailboxName?.replace(/"/g, '\\"');
+
       const script = `
-tell application "Mail"
-    set searchString to "${searchTerm.replace(/"/g, '\\"')}"
-    set foundMsgs to {}
-    set allBoxes to every mailbox
+    tell application "Mail"
+        set searchString to "${escapedSearchTerm}"
+        set foundMsgs to {}
 
-    repeat with currentBox in allBoxes
+        -- Determine mailboxes to search
+        set mailboxesToSearch to {}
+        if "${escapedAccount}" is not "" then
+            try
+                set targetAccount to first account whose name is "${escapedAccount}"
+                if "${escapedMailbox}" is not "" then
+                    try
+                        set mailboxesToSearch to {mailbox "${escapedMailbox}" of targetAccount}
+                    on error
+                         -- Mailbox not found in account
+                    end try
+                else
+                    set mailboxesToSearch to mailboxes of targetAccount
+                end if
+            on error
+                -- Account not found
+            end try
+        else if "${escapedMailbox}" is not "" then
+             -- Search all accounts for this mailbox name
+             try
+                 set mailboxesToSearch to every mailbox whose name is "${escapedMailbox}"
+             on error
+                 -- Mailbox name not found anywhere
+             end try
+        else
+            -- No account or mailbox specified, search all
+            set mailboxesToSearch to every mailbox
+        end if
+
+        if (count of mailboxesToSearch) is 0 then return {} end if
+
+        -- Collect messages matching search term
+        repeat with currentBox in mailboxesToSearch
+            try
+                -- Apply search term filter. If searchString is empty, search for a space instead.
+                set effectiveSearchString to searchString
+                if effectiveSearchString is "" then set effectiveSearchString to " "
+                
+                set boxMsgs to (messages of currentBox whose (subject contains effectiveSearchString) or (content contains effectiveSearchString) or (sender contains effectiveSearchString))
+                set foundMsgs to foundMsgs & boxMsgs
+                -- Optimization: Stop searching mailboxes if we already have enough potential candidates (e.g., limit * 2)
+                -- This avoids processing huge mailboxes unnecessarily if the limit is small.
+                if (count of foundMsgs) > (${limit} * 2) then exit repeat
+            on error
+                -- Ignore errors searching within a specific mailbox
+            end try
+        end repeat
+
+        -- Sort found messages by date descending (best effort)
+        -- AppleScript sorting can be complex, especially with large lists. This is a basic attempt.
+        -- Consider sorting in TypeScript if this is unreliable.
         try
-            set boxMsgs to (messages of currentBox whose (subject contains searchString) or (content contains searchString))
-            set foundMsgs to foundMsgs & boxMsgs
-            if (count of foundMsgs) ≥ ${limit} then exit repeat
+             tell application "System Events" to set foundMsgs to sort foundMsgs by date sent
+        on error
+             -- Sorting failed, proceed with unsorted list
         end try
-    end repeat
 
-    set resultList to {}
-    set msgCount to (count of foundMsgs)
-    if msgCount > ${limit} then set msgCount to ${limit}
+        -- Extract details from the top 'limit' messages
+        set resultList to {}
+        set msgCount to (count of foundMsgs)
+        if msgCount > ${limit} then set msgCount to ${limit}
 
-    repeat with i from 1 to msgCount
-        try
-            set currentMsg to item i of foundMsgs
-            set msgInfo to {subject:subject of currentMsg, sender:sender of currentMsg, ¬
-                            date:(date sent of currentMsg) as string, isRead:read status of currentMsg, ¬
-                            boxName:name of (mailbox of currentMsg)}
-            set end of resultList to msgInfo
-        end try
-    end repeat
+        repeat with i from 1 to msgCount
+            try
+                set currentMsg to item i of foundMsgs
+                
+                -- Initialize with defaults
+                set msgSubject to "[No Subject]"
+                set msgSender to "[Unknown Sender]"
+                set msgDateString to ""
+                set msgReadStatus to false
+                set msgContent to "[No Content]"
+                set boxName to "[Unknown Mailbox]"
+                set accName to "[Unknown Account]"
 
-    return resultList
-end tell`;
+                -- Get properties with individual error handling
+                try
+                    set msgSubject to subject of currentMsg
+                    if msgSubject is missing value then set msgSubject to "[No Subject]"
+                end try
+                try
+                    set msgSender to sender of currentMsg
+                    if msgSender is missing value then set msgSender to "[Unknown Sender]"
+                end try
+                try
+                    set msgDate to date sent of currentMsg
+                    set msgDateString to msgDate as string
+                end try
+                try
+                    set msgReadStatus to read status of currentMsg
+                end try
+                try
+                    set boxName to name of (mailbox of currentMsg)
+                end try
+                 try
+                    set accName to name of (account of mailbox of currentMsg)
+                end try
+                try
+                    set msgContent to content of currentMsg
+                    if length of msgContent > 500 then
+                        set msgContent to (text 1 thru 500 of msgContent) & "..."
+                    end if
+                on error
+                    set msgContent to "[Error getting content]"
+                end try
+
+                set msgInfo to {subject:msgSubject, sender:msgSender, dateSent:msgDateString, content:msgContent, isRead:msgReadStatus, mailbox:(accName & " - " & boxName)}
+                set end of resultList to msgInfo
+            on error
+                -- Ignore errors processing a single message's details
+            end try
+        end repeat
+
+        return resultList
+    end tell`;
 
       const asResult = await runAppleScript(script);
 
@@ -363,9 +463,9 @@ end tell`;
               subject: msg.subject || "No subject",
               sender: msg.sender || "Unknown sender",
               dateSent: msg.date || new Date().toString(),
-              content: "[Content not available through AppleScript method]",
+              content: msg.content || "[Content not available]", // Use content from parsed result
               isRead: msg.isRead || false,
-              mailbox: msg.boxName || "Unknown mailbox",
+              mailbox: msg.mailbox || "Unknown mailbox", // Use mailbox key from parsed result
             }));
           }
         } catch (parseError) {
@@ -377,61 +477,163 @@ end tell`;
       // Continue to JXA approach
     }
 
-    // JXA approach as fallback
+    // JXA approach as fallback (Re-enabled and updated)
+    console.error("AppleScript failed or returned no results, trying JXA fallback...");
     const searchResults: EmailMessage[] = await run(
-      (searchTerm: string, limit: number) => {
+      (searchTerm: string, accountName: string | undefined, mailboxName: string | undefined, fromDateStr: string | undefined, toDateStr: string | undefined, limit: number, maxMailboxes: number | undefined) => { // Added maxMailboxes
         const Mail = Application("Mail");
-        const results = [];
+        Mail.includeStandardAdditions = true; // Needed for potential dialogs/logging
+        const results: { // Use intermediate type for easier sorting
+            subject: string;
+            sender: string;
+            dateSent: Date; // Keep as Date object for sorting
+            content: string;
+            isRead: boolean;
+            mailbox: string;
+        }[] = [];
 
         try {
-          const mailboxes = Mail.mailboxes();
-
-          for (const mailbox of mailboxes) {
-            try {
-              // biome-ignore lint/suspicious/noImplicitAnyLet: <explanation>
-              let messages;
-              try {
-                messages = mailbox.messages.whose({
-                  _or: [
-                    { subject: { _contains: searchTerm } },
-                    { content: { _contains: searchTerm } },
-                  ],
-                })();
-
-                const count = Math.min(messages.length, limit);
-
-                for (let i = 0; i < count; i++) {
-                  try {
-                    const msg = messages[i];
-                    results.push({
-                      subject: msg.subject(),
-                      sender: msg.sender(),
-                      dateSent: msg.dateSent().toString(),
-                      content: msg.content()
-                        ? msg.content().substring(0, 500)
-                        : "[No content]", // Limit content length
-                      isRead: msg.readStatus(),
-                      mailbox: mailbox.name(),
-                    });
-                  } catch (msgError) {}
-                }
-
-                if (results.length >= limit) {
-                  break;
-                }
-              } catch (queryError) {
-              }
-            } catch (boxError) {}
+          // Parse date strings into Date objects
+          let startDate: Date | null = null;
+          let endDate: Date | null = null;
+          if (fromDateStr) {
+              try { startDate = new Date(fromDateStr); } catch (e) { console.log("JXA: Invalid fromDate format"); }
           }
-        } catch (mbError) {}
+          if (toDateStr) {
+              try { endDate = new Date(toDateStr); } catch (e) { console.log("JXA: Invalid toDate format"); }
+              // If endDate is provided, often we want to include the whole day
+              if (endDate && !toDateStr.includes('T')) { // If no time part, set to end of day
+                  endDate.setHours(23, 59, 59, 999);
+              }
+          }
+          let mailboxesToSearch: any[] = [];
 
-        return results.slice(0, limit);
+          // Determine mailboxes to search based on account/mailbox name
+          if (accountName) {
+            const account = Mail.accounts.whose({ name: accountName })[0];
+            if (account) {
+              if (mailboxName) {
+                 const mailbox = account.mailboxes.whose({ name: mailboxName })[0];
+                 if (mailbox) {
+                   mailboxesToSearch = [mailbox];
+                 }
+              } else {
+                mailboxesToSearch = account.mailboxes();
+              }
+            }
+          } else if (mailboxName) {
+             // Search all accounts if only mailbox name is given
+             mailboxesToSearch = Mail.mailboxes.whose({ name: mailboxName })();
+          } else {
+            // No account or mailbox specified, search all
+            mailboxesToSearch = Mail.mailboxes();
+          }
+
+          if (!mailboxesToSearch || mailboxesToSearch.length === 0) {
+             console.log("JXA: No mailboxes found to search.");
+             return []; // Return empty array, not EmailMessage[] yet
+          }
+          
+          // console.log(`JXA: Found ${mailboxesToSearch.length} mailboxes to search.`);
+
+          // Process messages and add to results incrementally, stopping when limit is reached
+          // Limit the number of mailboxes to search if maxMailboxes is provided
+          const mailboxesToActuallySearch = (maxMailboxes && maxMailboxes > 0) ? mailboxesToSearch.slice(0, maxMailboxes) : mailboxesToSearch;
+          // console.log(`JXA: Will search ${mailboxesToActuallySearch.length} mailboxes (max: ${maxMailboxes})`);
+
+          outerLoop: for (const mailbox of mailboxesToActuallySearch) { // Use limited list
+            try {
+              let query: any = null;
+              // Build the 'whose' query based on searchTerm (SUBJECT and SENDER only for performance)
+              if (searchTerm && searchTerm.trim() !== "") {
+                 query = {
+                   _or: [
+                     { subject: { _contains: searchTerm } },
+                     // { content: { _contains: searchTerm } }, // REMOVED for performance
+                     { sender: { _contains: searchTerm } },
+                   ],
+                 };
+              }
+
+              let messages;
+              if (query) {
+                 messages = mailbox.messages.whose(query)();
+              } else {
+                 messages = mailbox.messages();
+              }
+              
+              if (!messages || messages.length === 0) {
+                 continue; // Skip to next mailbox if no messages found
+              }
+
+              // Iterate through messages in this mailbox
+              for (const msg of messages) {
+                 if (!msg) continue; // Skip if message is null/undefined
+
+                 try {
+                    const dateSent = msg.dateSent();
+                    // Date filtering: Check if the message date is within the range
+                    if (dateSent instanceof Date) {
+                        if (startDate && dateSent < startDate) continue; // Skip if before start date
+                        if (endDate && dateSent > endDate) continue;   // Skip if after end date
+                    } else {
+                        continue; // Skip if date is invalid
+                    }
+
+                    // If date is in range (or no range specified), extract other details
+                    const mailBoxName = msg.mailbox.name() || "[Unknown Mailbox]";
+                    const accountNameResult = msg.mailbox.account.name() || "[Unknown Account]";
+                    
+                    results.push({
+                        subject: msg.subject() || "[No Subject]",
+                        sender: msg.sender() || "[Unknown Sender]",
+                        dateSent: dateSent, // Keep as Date object for now
+                        content: msg.content() ? msg.content().substring(0, 500) : "[No Content]",
+                        isRead: msg.readStatus(),
+                        mailbox: `${accountNameResult} - ${mailBoxName}`,
+                    });
+
+                    // Check if limit is reached
+                    if (results.length >= limit) {
+                        // console.log(`JXA: Limit of ${limit} reached. Stopping search.`);
+                        break outerLoop; // Break out of both loops
+                    }
+                 } catch (msgError: any) {
+                    // console.log(`JXA: Error processing individual message: ${msgError.message}`);
+                 }
+              } // End inner message loop
+              
+            } catch (queryError: any) {
+               // console.log(`JXA: Error querying mailbox ${mailbox.name()}: ${queryError.message}`);
+            }
+          } // End outer mailbox loop (outerLoop)
+
+          // Sort the final results array (which is already limited) by date
+          try {
+             // Add type annotation for sort parameters
+             results.sort((a: {dateSent: Date}, b: {dateSent: Date}) => b.dateSent.getTime() - a.dateSent.getTime());
+             // console.log("JXA: Sorting completed.");
+          } catch (sortError: any) {
+             // console.log(`JXA: Error sorting results: ${sortError.message}.`);
+          }
+          
+        } catch (error: any) {
+           // console.log(`JXA: Top-level error: ${error.message}`);
+        }
+
+        // console.log(`JXA: Returning ${results.length} processed messages.`);
+        // Convert Date objects to ISO strings before returning
+        return results.map(r => ({ ...r, dateSent: r.dateSent.toISOString() }));
       },
       searchTerm,
+      accountName,
+      mailboxName,
+      fromDate, // Pass fromDate
+      toDate,   // Pass toDate
       limit,
     );
 
-    return searchResults;
+    return searchResults; // Return results from JXA
   } catch (error) {
     console.error("Error in searchMails:", error);
     throw new Error(
@@ -664,6 +866,8 @@ end tell`);
     );
   }
 }
+// Removed getLatestMails function
+
 
 export default {
   getUnreadMails,
@@ -672,4 +876,5 @@ export default {
   getMailboxes,
   getAccounts,
   getMailboxesForAccount,
+  // Removed getLatestMails from export
 };
