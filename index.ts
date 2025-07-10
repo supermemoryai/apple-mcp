@@ -46,7 +46,7 @@ async function loadModule<T extends 'contacts' | 'notes' | 'message' | 'mail' | 
   if (safeModeFallback) {
     console.error(`Loading ${moduleName} module on demand (safe mode)...`);
   }
-  
+
   try {
     switch (moduleName) {
       case 'contacts':
@@ -87,7 +87,7 @@ loadingTimeout = setTimeout(() => {
   console.error("Loading timeout reached. Switching to safe mode (lazy loading...)");
   useEagerLoading = false;
   safeModeFallback = true;
-  
+
   // Clear the references to any modules that might be in a bad state
   contacts = null;
   notes = null;
@@ -96,7 +96,7 @@ loadingTimeout = setTimeout(() => {
   reminders = null;
   webSearch = null;
   calendar = null;
-  
+
   // Proceed with server setup
   initServer();
 }, 5000); // 5 second timeout
@@ -105,54 +105,54 @@ loadingTimeout = setTimeout(() => {
 async function attemptEagerLoading() {
   try {
     console.error("Attempting to eagerly load modules...");
-    
+
     // Try to import all modules
     contacts = (await import('./utils/contacts')).default;
     console.error("- Contacts module loaded successfully");
-    
+
     notes = (await import('./utils/notes')).default;
     console.error("- Notes module loaded successfully");
-    
+
     message = (await import('./utils/message')).default;
     console.error("- Message module loaded successfully");
-    
+
     mail = (await import('./utils/mail')).default;
     console.error("- Mail module loaded successfully");
-    
+
     reminders = (await import('./utils/reminders')).default;
     console.error("- Reminders module loaded successfully");
 
     webSearch = (await import('./utils/webSearch')).default;
     console.error("- WebSearch module loaded successfully");
-    
+
     calendar = (await import('./utils/calendar')).default;
     console.error("- Calendar module loaded successfully");
-    
+
     maps = (await import('./utils/maps')).default;
     console.error("- Maps module loaded successfully");
-    
+
     // If we get here, clear the timeout and proceed with eager loading
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
       loadingTimeout = null;
     }
-    
+
     console.error("All modules loaded successfully, using eager loading mode");
     initServer();
   } catch (error) {
     console.error("Error during eager loading:", error);
     console.error("Switching to safe mode (lazy loading)...");
-    
+
     // Clear any timeout if it exists
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
       loadingTimeout = null;
     }
-    
+
     // Switch to safe mode
     useEagerLoading = false;
     safeModeFallback = true;
-    
+
     // Clear the references to any modules that might be in a bad state
     contacts = null;
     notes = null;
@@ -162,7 +162,7 @@ async function attemptEagerLoading() {
     webSearch = null;
     calendar = null;
     maps = null;
-    
+
     // Initialize the server in safe mode
     initServer();
   }
@@ -177,7 +177,7 @@ let server: Server;
 // Initialize the server and set up handlers
 function initServer() {
   console.error(`Initializing server in ${safeModeFallback ? 'safe' : 'standard'} mode...`);
-  
+
   server = new Server(
     {
       name: "Apple MCP tools",
@@ -210,13 +210,13 @@ function initServer() {
 
           try {
             const contactsModule = await loadModule('contacts');
-            
+
             if (args.name) {
               const numbers = await contactsModule.findNumber(args.name);
               return {
                 content: [{
                   type: "text",
-                  text: numbers.length ? 
+                  text: numbers.length ?
                     `${args.name}: ${numbers.join(", ")}` :
                     `No contact found for "${args.name}". Try a different name or use no name parameter to list all contacts.`
                 }],
@@ -225,7 +225,7 @@ function initServer() {
             } else {
               const allNumbers = await contactsModule.getAllNumbers();
               const contactCount = Object.keys(allNumbers).length;
-              
+
               if (contactCount === 0) {
                 return {
                   content: [{
@@ -260,7 +260,7 @@ function initServer() {
             };
           }
         }
-        
+
         case "notes": {
           if (!isNotesArgs(args)) {
             throw new Error("Invalid arguments for notes tool");
@@ -269,13 +269,13 @@ function initServer() {
           try {
             const notesModule = await loadModule('notes');
             const { operation } = args;
-            
+
             switch (operation) {
               case "search": {
                 if (!args.searchText) {
                   throw new Error("Search text is required for search operation");
                 }
-                
+
                 const foundNotes = await notesModule.findNote(args.searchText);
                 return {
                   content: [{
@@ -287,7 +287,7 @@ function initServer() {
                   isError: false
                 };
               }
-              
+
               case "list": {
                 const allNotes = await notesModule.getAllNotes();
                 return {
@@ -295,20 +295,20 @@ function initServer() {
                     type: "text",
                     text: allNotes.length ?
                       allNotes.map((note) => `${note.name}:\n${note.content}`)
-                      .join("\n\n") : 
+                      .join("\n\n") :
                       "No notes exist."
                   }],
                   isError: false
                 };
               }
-              
+
               case "create": {
                 if (!args.title || !args.body) {
                   throw new Error("Title and body are required for create operation");
                 }
-                
+
                 const result = await notesModule.createNote(args.title, args.body, args.folderName);
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -319,7 +319,7 @@ function initServer() {
                   isError: !result.success
                 };
               }
-              
+
               default:
                 throw new Error(`Unknown operation: ${operation}`);
             }
@@ -341,7 +341,7 @@ function initServer() {
 
           try {
             const messageModule = await loadModule('message');
-            
+
             switch (args.operation) {
               case "send": {
                 if (!args.phoneNumber || !args.message) {
@@ -360,10 +360,10 @@ function initServer() {
                 }
                 const messages = await messageModule.readMessages(args.phoneNumber, args.limit);
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: messages.length > 0 ? 
-                      messages.map(msg => 
+                  content: [{
+                    type: "text",
+                    text: messages.length > 0 ?
+                      messages.map(msg =>
                         `[${new Date(msg.date).toLocaleString()}] ${msg.is_from_me ? 'Me' : msg.sender}: ${msg.content}`
                       ).join("\n") :
                       "No messages found"
@@ -382,9 +382,9 @@ function initServer() {
                   new Date(args.scheduledTime)
                 );
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: `Message scheduled to be sent to ${args.phoneNumber} at ${scheduledMsg.scheduledTime}` 
+                  content: [{
+                    type: "text",
+                    text: `Message scheduled to be sent to ${args.phoneNumber} at ${scheduledMsg.scheduledTime}`
                   }],
                   isError: false
                 };
@@ -392,7 +392,7 @@ function initServer() {
 
               case "unread": {
                 const messages = await messageModule.getUnreadMessages(args.limit);
-                
+
                 // Look up contact names for all messages
                 const contactsModule = await loadModule('contacts');
                 const messagesWithNames = await Promise.all(
@@ -413,11 +413,11 @@ function initServer() {
                 );
 
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: messagesWithNames.length > 0 ? 
+                  content: [{
+                    type: "text",
+                    text: messagesWithNames.length > 0 ?
                       `Found ${messagesWithNames.length} unread message(s):\n` +
-                      messagesWithNames.map(msg => 
+                      messagesWithNames.map(msg =>
                         `[${new Date(msg.date).toLocaleString()}] From ${msg.displayName}:\n${msg.content}`
                       ).join("\n\n") :
                       "No unread messages found"
@@ -447,7 +447,7 @@ function initServer() {
 
           try {
             const mailModule = await loadModule('mail');
-            
+
             switch (args.operation) {
               case "unread": {
                 // If an account is specified, we'll try to search specifically in that account
@@ -460,10 +460,10 @@ tell application "Mail"
     set resultList to {}
     try
         set targetAccount to first account whose name is "${args.account.replace(/"/g, '\\"')}"
-        
+
         -- Get mailboxes for this account
         set acctMailboxes to every mailbox of targetAccount
-        
+
         -- If mailbox is specified, only search in that mailbox
         set mailboxesToSearch to acctMailboxes
         ${args.mailbox ? `
@@ -475,7 +475,7 @@ tell application "Mail"
             end if
         end repeat
         ` : ''}
-        
+
         -- Search specified mailboxes
         repeat with mb in mailboxesToSearch
             try
@@ -485,13 +485,13 @@ tell application "Mail"
                     if (count of unreadMessages) < msgLimit then
                         set msgLimit to (count of unreadMessages)
                     end if
-                    
+
                     repeat with i from 1 to msgLimit
                         try
                             set currentMsg to item i of unreadMessages
                             set msgData to {subject:(subject of currentMsg), sender:(sender of currentMsg), ¬
                                         date:(date sent of currentMsg) as string, mailbox:(name of mb)}
-                            
+
                             -- Try to get content if possible
                             try
                                 set msgContent to content of currentMsg
@@ -502,13 +502,13 @@ tell application "Mail"
                             on error
                                 set msgData to msgData & {content:"[Content not available]"}
                             end try
-                            
+
                             set end of resultList to msgData
                         on error
                             -- Skip problematic messages
                         end try
                     end repeat
-                    
+
                     if (count of resultList) ≥ ${args.limit || 10} then exit repeat
                 end if
             on error
@@ -518,16 +518,16 @@ tell application "Mail"
     on error errMsg
         return "Error: " & errMsg
     end try
-    
+
     return resultList
 end tell`;
-                  
+
                   try {
                     const asResult = await runAppleScript(script);
                     if (asResult && asResult.startsWith('Error:')) {
                       throw new Error(asResult);
                     }
-                    
+
                     // Parse the results - similar to general getUnreadMails
                     const emailData = [];
                     const matches = asResult.match(/\{([^}]+)\}/g);
@@ -536,7 +536,7 @@ end tell`;
                         try {
                           const props = match.substring(1, match.length - 1).split(',');
                           const email: any = {};
-                          
+
                           props.forEach(prop => {
                             const parts = prop.split(':');
                             if (parts.length >= 2) {
@@ -545,7 +545,7 @@ end tell`;
                               email[key] = value;
                             }
                           });
-                          
+
                           if (email.subject || email.sender) {
                             emailData.push({
                               subject: email.subject || "No subject",
@@ -561,7 +561,7 @@ end tell`;
                         }
                       }
                     }
-                    
+
                     emails = emailData;
                   } catch (error) {
                     console.error('Error getting account-specific emails:', error);
@@ -572,13 +572,13 @@ end tell`;
                   // No account specified, use the general method
                   emails = await mailModule.getUnreadMails(args.limit);
                 }
-                
+
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: emails.length > 0 ? 
+                  content: [{
+                    type: "text",
+                    text: emails.length > 0 ?
                       `Found ${emails.length} unread email(s)${args.account ? ` in account "${args.account}"` : ''}${args.mailbox ? ` and mailbox "${args.mailbox}"` : ''}:\n\n` +
-                      emails.map((email: any) => 
+                      emails.map((email: any) =>
                         `[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? '...' : ''}`
                       ).join("\n\n") :
                       `No unread emails found${args.account ? ` in account "${args.account}"` : ''}${args.mailbox ? ` and mailbox "${args.mailbox}"` : ''}`
@@ -593,11 +593,11 @@ end tell`;
                 }
                 const emails = await mailModule.searchMails(args.searchTerm, args.limit);
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: emails.length > 0 ? 
+                  content: [{
+                    type: "text",
+                    text: emails.length > 0 ?
                       `Found ${emails.length} email(s) for "${args.searchTerm}"${args.account ? ` in account "${args.account}"` : ''}${args.mailbox ? ` and mailbox "${args.mailbox}"` : ''}:\n\n` +
-                      emails.map((email: any) => 
+                      emails.map((email: any) =>
                         `[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 200)}${email.content.length > 200 ? '...' : ''}`
                       ).join("\n\n") :
                       `No emails found for "${args.searchTerm}"${args.account ? ` in account "${args.account}"` : ''}${args.mailbox ? ` and mailbox "${args.mailbox}"` : ''}`
@@ -621,9 +621,9 @@ end tell`;
                 if (args.account) {
                   const mailboxes = await mailModule.getMailboxesForAccount(args.account);
                   return {
-                    content: [{ 
-                      type: "text", 
-                      text: mailboxes.length > 0 ? 
+                    content: [{
+                      type: "text",
+                      text: mailboxes.length > 0 ?
                         `Found ${mailboxes.length} mailboxes for account "${args.account}":\n\n${mailboxes.join("\n")}` :
                         `No mailboxes found for account "${args.account}". Make sure the account name is correct.`
                     }],
@@ -632,9 +632,9 @@ end tell`;
                 } else {
                   const mailboxes = await mailModule.getMailboxes();
                   return {
-                    content: [{ 
-                      type: "text", 
-                      text: mailboxes.length > 0 ? 
+                    content: [{
+                      type: "text",
+                      text: mailboxes.length > 0 ?
                         `Found ${mailboxes.length} mailboxes:\n\n${mailboxes.join("\n")}` :
                         "No mailboxes found. Make sure Mail app is running and properly configured."
                     }],
@@ -646,9 +646,9 @@ end tell`;
               case "accounts": {
                 const accounts = await mailModule.getAccounts();
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: accounts.length > 0 ? 
+                  content: [{
+                    type: "text",
+                    text: accounts.length > 0 ?
                       `Found ${accounts.length} email accounts:\n\n${accounts.join("\n")}` :
                       "No email accounts found. Make sure Mail app is configured with at least one account."
                   }],
@@ -667,11 +667,11 @@ end tell`;
                 }
                 const emails = await mailModule.getLatestMails(account, args.limit);
                 return {
-                  content: [{ 
-                    type: "text", 
-                    text: emails.length > 0 ? 
+                  content: [{
+                    type: "text",
+                    text: emails.length > 0 ?
                       `Found ${emails.length} latest email(s) in account "${account}":\n\n` +
-                      emails.map((email: any) => 
+                      emails.map((email: any) =>
                         `[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? '...' : ''}`
                       ).join("\n\n") :
                       `No latest emails found in account "${account}"`
@@ -701,7 +701,7 @@ end tell`;
 
           try {
             const remindersModule = await loadModule('reminders');
-            
+
             const { operation } = args;
 
             if (operation === "list") {
@@ -717,7 +717,7 @@ end tell`;
                 reminders: allReminders,
                 isError: false
               };
-            } 
+            }
             else if (operation === "search") {
               // Search for reminders
               const { searchText } = args;
@@ -725,14 +725,14 @@ end tell`;
               return {
                 content: [{
                   type: "text",
-                  text: results.length > 0 
-                    ? `Found ${results.length} reminders matching "${searchText}".` 
+                  text: results.length > 0
+                    ? `Found ${results.length} reminders matching "${searchText}".`
                     : `No reminders found matching "${searchText}".`
                 }],
                 reminders: results,
                 isError: false
               };
-            } 
+            }
             else if (operation === "open") {
               // Open a reminder
               const { searchText } = args;
@@ -740,14 +740,14 @@ end tell`;
               return {
                 content: [{
                   type: "text",
-                  text: result.success 
-                    ? `Opened Reminders app. Found reminder: ${result.reminder?.name}` 
+                  text: result.success
+                    ? `Opened Reminders app. Found reminder: ${result.reminder?.name}`
                     : result.message
                 }],
                 ...result,
                 isError: !result.success
               };
-            } 
+            }
             else if (operation === "create") {
               // Create a reminder
               const { name, listName, notes, dueDate } = args;
@@ -769,8 +769,8 @@ end tell`;
               return {
                 content: [{
                   type: "text",
-                  text: results.length > 0 
-                    ? `Found ${results.length} reminders in list with ID "${listId}".` 
+                  text: results.length > 0
+                    ? `Found ${results.length} reminders in list with ID "${listId}".`
                     : `No reminders found in list with ID "${listId}".`
                 }],
                 reminders: results,
@@ -807,8 +807,8 @@ end tell`;
           return {
             content: [{
               type: "text",
-              text: result.results.length > 0 ? 
-                `Found ${result.results.length} results for "${args.query}". ${result.results.map(r => `[${r.displayUrl}] ${r.title} - ${r.snippet} \n content: ${r.content}`).join("\n")}` : 
+              text: result.results.length > 0 ?
+                `Found ${result.results.length} results for "${args.query}". ${result.results.map(r => `[${r.displayUrl}] ${r.title} - ${r.snippet} \n content: ${r.content}`).join("\n")}` :
                 `No results found for "${args.query}".`
             }],
             isError: false
@@ -819,86 +819,86 @@ end tell`;
           if (!isCalendarArgs(args)) {
             throw new Error("Invalid arguments for calendar tool");
           }
-          
+
           try {
             const calendarModule = await loadModule("calendar");
             const { operation } = args;
-            
-            
+
+
             switch (operation) {
               case "search": {
                 const { searchText, limit, fromDate, toDate } = args;
                 const events = await calendarModule.searchEvents(searchText!, limit, fromDate, toDate);
-                
+
                 return {
                   content: [{
                     type: "text",
-                    text: events.length > 0 ? 
-                      `Found ${events.length} events matching "${searchText}":\n\n${events.map(event => 
+                    text: events.length > 0 ?
+                      `Found ${events.length} events matching "${searchText}":\n\n${events.map(event =>
                         `${event.title} (${new Date(event.startDate!).toLocaleString()} - ${new Date(event.endDate!).toLocaleString()})\n` +
                         `Location: ${event.location || 'Not specified'}\n` +
                         `Calendar: ${event.calendarName}\n` +
                         `ID: ${event.id}\n` +
                         `${event.notes ? `Notes: ${event.notes}\n` : ''}`
-                      ).join("\n\n")}` : 
+                      ).join("\n\n")}` :
                       `No events found matching "${searchText}".`
                   }],
                   isError: false
                 };
               }
-              
+
               case "open": {
                 const { eventId } = args;
                 const result = await calendarModule.openEvent(eventId!);
-                
+
                 return {
                   content: [{
                     type: "text",
-                    text: result.success ? 
-                      result.message : 
+                    text: result.success ?
+                      result.message :
                       `Error opening event: ${result.message}`
                   }],
                   isError: !result.success
                 };
               }
-              
+
               case "list": {
                 const { limit, fromDate, toDate } = args;
                 const events = await calendarModule.getEvents(limit, fromDate, toDate);
-                
+
                 const startDateText = fromDate ? new Date(fromDate).toLocaleDateString() : 'today';
                 const endDateText = toDate ? new Date(toDate).toLocaleDateString() : 'next 7 days';
-                
+
                 return {
                   content: [{
                     type: "text",
-                    text: events.length > 0 ? 
-                      `Found ${events.length} events from ${startDateText} to ${endDateText}:\n\n${events.map(event => 
+                    text: events.length > 0 ?
+                      `Found ${events.length} events from ${startDateText} to ${endDateText}:\n\n${events.map(event =>
                         `${event.title} (${new Date(event.startDate!).toLocaleString()} - ${new Date(event.endDate!).toLocaleString()})\n` +
                         `Location: ${event.location || 'Not specified'}\n` +
                         `Calendar: ${event.calendarName}\n` +
                         `ID: ${event.id}`
-                      ).join("\n\n")}` : 
+                      ).join("\n\n")}` :
                       `No events found from ${startDateText} to ${endDateText}.`
                   }],
                   isError: false
                 };
               }
-              
+
               case "create": {
                 const { title, startDate, endDate, location, notes, isAllDay, calendarName } = args;
                 const result = await calendarModule.createEvent(title!, startDate!, endDate!, location, notes, isAllDay, calendarName);
                 return {
                   content: [{
                     type: "text",
-                    text: result.success ? 
-                      `${result.message} Event scheduled from ${new Date(startDate!).toLocaleString()} to ${new Date(endDate!).toLocaleString()}${result.eventId ? `\nEvent ID: ${result.eventId}` : ''}` : 
+                    text: result.success ?
+                      `${result.message} Event scheduled from ${new Date(startDate!).toLocaleString()} to ${new Date(endDate!).toLocaleString()}${result.eventId ? `\nEvent ID: ${result.eventId}` : ''}` :
                       `Error creating event: ${result.message}`
                   }],
                   isError: !result.success
                 };
               }
-              
+
               default:
                 throw new Error(`Unknown calendar operation: ${operation}`);
             }
@@ -912,48 +912,48 @@ end tell`;
             };
           }
         }
-        
+
         case "maps": {
           if (!isMapsArgs(args)) {
             throw new Error("Invalid arguments for maps tool");
           }
-          
+
           try {
             const mapsModule = await loadModule("maps");
             const { operation } = args;
-            
+
             switch (operation) {
               case "search": {
                 const { query, limit } = args;
                 if (!query) {
                   throw new Error("Search query is required for search operation");
                 }
-                
+
                 const result = await mapsModule.searchLocations(query, limit);
-                
+
                 return {
                   content: [{
                     type: "text",
-                    text: result.success ? 
-                      `${result.message}\n\n${result.locations.map(location => 
+                    text: result.success ?
+                      `${result.message}\n\n${result.locations.map(location =>
                         `Name: ${location.name}\n` +
                         `Address: ${location.address}\n` +
                         `${location.latitude && location.longitude ? `Coordinates: ${location.latitude}, ${location.longitude}\n` : ''}`
-                      ).join("\n\n")}` : 
+                      ).join("\n\n")}` :
                       `${result.message}`
                   }],
                   isError: !result.success
                 };
               }
-              
+
               case "save": {
                 const { name, address } = args;
                 if (!name || !address) {
                   throw new Error("Name and address are required for save operation");
                 }
-                
+
                 const result = await mapsModule.saveLocation(name, address);
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -962,15 +962,15 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               case "pin": {
                 const { name, address } = args;
                 if (!name || !address) {
                   throw new Error("Name and address are required for pin operation");
                 }
-                
+
                 const result = await mapsModule.dropPin(name, address);
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -979,15 +979,15 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               case "directions": {
                 const { fromAddress, toAddress, transportType } = args;
                 if (!fromAddress || !toAddress) {
                   throw new Error("From and to addresses are required for directions operation");
                 }
-                
+
                 const result = await mapsModule.getDirections(fromAddress, toAddress, transportType as 'driving' | 'walking' | 'transit');
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -996,10 +996,10 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               case "listGuides": {
                 const result = await mapsModule.listGuides();
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -1008,15 +1008,15 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               case "addToGuide": {
                 const { address, guideName } = args;
                 if (!address || !guideName) {
                   throw new Error("Address and guideName are required for addToGuide operation");
                 }
-                
+
                 const result = await mapsModule.addToGuide(address, guideName);
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -1025,15 +1025,15 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               case "createGuide": {
                 const { guideName } = args;
                 if (!guideName) {
                   throw new Error("Guide name is required for createGuide operation");
                 }
-                
+
                 const result = await mapsModule.createGuide(guideName);
-                
+
                 return {
                   content: [{
                     type: "text",
@@ -1042,7 +1042,7 @@ end tell`;
                   isError: !result.success
                 };
               }
-              
+
               default:
                 throw new Error(`Unknown maps operation: ${operation}`);
             }
@@ -1115,7 +1115,7 @@ function isContactsArgs(args: unknown): args is { name?: string } {
   );
 }
 
-function isNotesArgs(args: unknown): args is { 
+function isNotesArgs(args: unknown): args is {
   operation: "search" | "list" | "create";
   searchText?: string;
   title?: string;
@@ -1125,16 +1125,16 @@ function isNotesArgs(args: unknown): args is {
   if (typeof args !== "object" || args === null) {
     return false;
   }
-  
+
   const { operation } = args as { operation?: unknown };
   if (typeof operation !== "string") {
     return false;
   }
-  
+
   if (!["search", "list", "create"].includes(operation)) {
     return false;
   }
-  
+
   // Validate fields based on operation
   if (operation === "search") {
     const { searchText } = args as { searchText?: unknown };
@@ -1142,21 +1142,21 @@ function isNotesArgs(args: unknown): args is {
       return false;
     }
   }
-  
+
   if (operation === "create") {
     const { title, body } = args as { title?: unknown, body?: unknown };
-    if (typeof title !== "string" || title === "" || 
+    if (typeof title !== "string" || title === "" ||
         typeof body !== "string") {
       return false;
     }
-    
+
     // Check folderName if provided
     const { folderName } = args as { folderName?: unknown };
     if (folderName !== undefined && (typeof folderName !== "string" || folderName === "")) {
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -1168,13 +1168,13 @@ function isMessagesArgs(args: unknown): args is {
   scheduledTime?: string;
 } {
   if (typeof args !== "object" || args === null) return false;
-  
+
   const { operation, phoneNumber, message, limit, scheduledTime } = args as any;
-  
+
   if (!operation || !["send", "read", "schedule", "unread"].includes(operation)) {
     return false;
   }
-  
+
   // Validate required fields based on operation
   switch (operation) {
     case "send":
@@ -1189,13 +1189,13 @@ function isMessagesArgs(args: unknown): args is {
       // No additional required fields
       break;
   }
-  
+
   // Validate field types if present
   if (phoneNumber && typeof phoneNumber !== "string") return false;
   if (message && typeof message !== "string") return false;
   if (limit && typeof limit !== "number") return false;
   if (scheduledTime && typeof scheduledTime !== "string") return false;
-  
+
   return true;
 }
 
@@ -1212,21 +1212,21 @@ function isMailArgs(args: unknown): args is {
   bcc?: string;
 } {
   if (typeof args !== "object" || args === null) return false;
-  
+
   const { operation, account, mailbox, limit, searchTerm, to, subject, body, cc, bcc } = args as any;
-  
+
   if (!operation || !["unread", "search", "send", "mailboxes", "accounts", "latest"].includes(operation)) {
     return false;
   }
-  
+
   // Validate required fields based on operation
   switch (operation) {
     case "search":
       if (!searchTerm || typeof searchTerm !== "string") return false;
       break;
     case "send":
-      if (!to || typeof to !== "string" || 
-          !subject || typeof subject !== "string" || 
+      if (!to || typeof to !== "string" ||
+          !subject || typeof subject !== "string" ||
           !body || typeof body !== "string") return false;
       break;
     case "unread":
@@ -1236,14 +1236,14 @@ function isMailArgs(args: unknown): args is {
       // No additional required fields
       break;
   }
-  
+
   // Validate field types if present
   if (account && typeof account !== "string") return false;
   if (mailbox && typeof mailbox !== "string") return false;
   if (limit && typeof limit !== "number") return false;
   if (cc && typeof cc !== "string") return false;
-  if (bcc and typeof bcc !== "string") return false;
-  
+  if (bcc && typeof bcc !== "string") return false;
+
   return true;
 }
 
@@ -1271,19 +1271,19 @@ function isRemindersArgs(args: unknown): args is {
   }
 
   // For search and open operations, searchText is required
-  if ((operation === "search" || operation === "open") && 
+  if ((operation === "search" || operation === "open") &&
       (typeof (args as any).searchText !== "string" || (args as any).searchText === "")) {
     return false;
   }
 
   // For create operation, name is required
-  if (operation === "create" && 
+  if (operation === "create" &&
       (typeof (args as any).name !== "string" || (args as any).name === "")) {
     return false;
   }
-  
+
   // For listById operation, listId is required
-  if (operation === "listById" && 
+  if (operation === "listById" &&
       (typeof (args as any).listId !== "string" || (args as any).listId === "")) {
     return false;
   }
@@ -1343,12 +1343,12 @@ function isCalendarArgs(args: unknown): args is {
   }
 
   if (operation === "create") {
-    const { title, startDate, endDate } = args as { 
-      title?: unknown; 
-      startDate?: unknown; 
+    const { title, startDate, endDate } = args as {
+      title?: unknown;
+      startDate?: unknown;
       endDate?: unknown;
     };
-    
+
     if (typeof title !== "string" || typeof startDate !== "string" || typeof endDate !== "string") {
       return false;
     }
@@ -1404,19 +1404,19 @@ function isMapsArgs(args: unknown): args is {
 
     // Check transportType if provided
     const { transportType } = args as { transportType?: unknown };
-    if (transportType !== undefined && 
+    if (transportType !== undefined &&
         (typeof transportType !== "string" || !["driving", "walking", "transit"].includes(transportType))) {
       return false;
     }
   }
-  
+
   if (operation === "createGuide") {
     const { guideName } = args as { guideName?: unknown };
     if (typeof guideName !== "string" || guideName === "") {
       return false;
     }
   }
-  
+
   if (operation === "addToGuide") {
     const { address, guideName } = args as { address?: unknown; guideName?: unknown };
     if (typeof address !== "string" || address === "" || typeof guideName !== "string" || guideName === "") {
