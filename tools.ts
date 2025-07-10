@@ -86,8 +86,8 @@ const CONTACTS_TOOL: Tool = {
       properties: {
         operation: {
           type: "string",
-          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', or 'accounts'",
-          enum: ["unread", "search", "send", "mailboxes", "accounts"]
+          description: "Operation to perform: 'unread', 'search', 'send', 'mailboxes', 'accounts', or 'latest'",
+          enum: ["unread", "search", "send", "mailboxes", "accounts", "latest"]
         },
         account: {
           type: "string",
@@ -99,7 +99,7 @@ const CONTACTS_TOOL: Tool = {
         },
         limit: {
           type: "number",
-          description: "Number of emails to retrieve (optional, for unread and search operations)"
+          description: "Number of emails to retrieve (optional, for unread, search, and latest operations)"
         },
         searchTerm: {
           type: "string",
