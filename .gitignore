@@ -132,6 +132,7 @@ out
 
 .nuxt
 dist
+!dist/index.js
 
 # Gatsby files
 

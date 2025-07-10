@@ -20,10 +20,13 @@
     "claude"
   ],
   "bin": {
-    "apple-mcp": "./index.ts"
+    "apple-mcp": "./dist/index.js"
   },
   "scripts": {
-    "dev": "bun run index.ts"
+    "dev": "bun run index.ts",
+    "build": "bun build index.ts --outfile=dist/index.js --target=node --minify",
+    "start": "node dist/index.js",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
