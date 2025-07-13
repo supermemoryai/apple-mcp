@@ -223,6 +223,19 @@ function initServer() {
                 isError: false
               };
             } else {
+              // First test access to provide better error messages
+              const testResult = await contactsModule.testContactsAccess();
+              
+              if (!testResult.success) {
+                return {
+                  content: [{
+                    type: "text",
+                    text: `❌ ${testResult.message}\n\nTo fix this:\n1. Open System Preferences > Security & Privacy > Privacy > Contacts\n2. Make sure your terminal application or the app running this MCP server has permission\n3. Try running the contacts command again`
+                  }],
+                  isError: true
+                };
+              }
+              
               const allNumbers = await contactsModule.getAllNumbers();
               const contactCount = Object.keys(allNumbers).length;
 
@@ -230,7 +243,7 @@ function initServer() {
                 return {
                   content: [{
                     type: "text",
-                    text: "No contacts found in the address book. Please make sure you have granted access to Contacts."
+                    text: `✅ Successfully connected to Contacts app (found ${testResult.contactCount || 0} total contacts).\n\n❌ However, no contacts with phone numbers were found.\n\nThis could mean:\n1. Your contacts don't have phone numbers saved\n2. There's an issue with the phone number extraction\n3. All contacts were skipped due to processing errors\n\nTry adding a phone number to a contact and test again.`
                   }],
                   isError: false
                 };
@@ -244,7 +257,7 @@ function initServer() {
                 content: [{
                   type: "text",
                   text: formattedContacts.length > 0 ?
-                    `Found ${contactCount} contacts:\n\n${formattedContacts.join("\n")}` :
+                    `✅ Found ${contactCount} contacts with phone numbers:\n\n${formattedContacts.join("\n")}` :
                     "Found contacts but none have phone numbers. Try searching by name to see more details."
                 }],
                 isError: false
@@ -254,7 +267,7 @@ function initServer() {
             return {
               content: [{
                 type: "text",
-                text: `Error accessing contacts: ${error instanceof Error ? error.message : String(error)}`
+                text: `❌ Error accessing contacts: ${error instanceof Error ? error.message : String(error)}\n\nTroubleshooting:\n1. Check System Preferences > Security & Privacy > Privacy > Contacts\n2. Make sure this application has permission to access Contacts\n3. Try restarting the MCP server\n4. Check the console logs for more detailed error information`
               }],
               isError: true
             };
