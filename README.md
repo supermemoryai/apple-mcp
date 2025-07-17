@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dhravya-apple-mcp-badge.png)](https://mseep.ai/app/dhravya-apple-mcp)
+
 # Apple MCP tools
 
 Love this MCP? Check out supermemory MCP too - https://mcp.supermemory.ai
