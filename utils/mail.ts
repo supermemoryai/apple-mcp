@@ -333,6 +333,86 @@ end tell`;
 }
 
 /**
+ * Create a draft email (NEW FEATURE)
+ */
+async function createDraft(
+	to: string,
+	subject: string,
+	body: string,
+	cc?: string,
+	bcc?: string,
+): Promise<string | undefined> {
+	try {
+		const accessResult = await requestMailAccess();
+		if (!accessResult.hasAccess) {
+			throw new Error(accessResult.message);
+		}
+
+		// Validate inputs
+		if (!to || !to.trim()) {
+			throw new Error("To address is required");
+		}
+		if (!subject || !subject.trim()) {
+			throw new Error("Subject is required");
+		}
+		if (!body || !body.trim()) {
+			throw new Error("Email body is required");
+		}
+
+		// Use file-based approach for email body to avoid AppleScript escaping issues
+		const tmpFile = `/tmp/email-body-${Date.now()}.txt`;
+		const fs = require("fs");
+
+		// Write content to temporary file
+		fs.writeFileSync(tmpFile, body.trim(), "utf8");
+
+		const script = `
+tell application "Mail"
+    activate
+
+    -- Read email body from file to preserve formatting
+    set emailBody to read file POSIX file "${tmpFile}" as «class utf8»
+
+    -- Create new message as DRAFT (visible:true opens compose window)
+    set newMessage to make new outgoing message with properties {subject:"${subject.replace(/"/g, '\\"')}", content:emailBody, visible:true}
+
+    tell newMessage
+        make new to recipient with properties {address:"${to.replace(/"/g, '\\"')}"}
+        ${cc ? `make new cc recipient with properties {address:"${cc.replace(/"/g, '\\"')}"}` : ""}
+        ${bcc ? `make new bcc recipient with properties {address:"${bcc.replace(/"/g, '\\"')}"}` : ""}
+    end tell
+
+    -- Do NOT send - this creates a draft that opens for editing
+    -- send newMessage  <-- Commented out for draft creation
+    
+    return "DRAFT_CREATED"
+end tell`;
+
+		const result = (await runAppleScript(script)) as string;
+
+		// Clean up temporary file
+		try {
+			fs.unlinkSync(tmpFile);
+		} catch (e) {
+			// Ignore cleanup errors
+		}
+
+		if (result === "DRAFT_CREATED") {
+			return `Draft email created for ${to} with subject "${subject}". The compose window is now open for editing.`;
+		} else {
+			throw new Error("Failed to create draft email");
+		}
+	} catch (error) {
+		console.error(
+			`Error creating draft email: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		throw new Error(
+			`Error creating draft email: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+/**
  * Get list of mailboxes (simplified for performance)
  */
 async function getMailboxes(): Promise<string[]> {
@@ -585,6 +665,7 @@ export default {
 	getUnreadMails,
 	searchMails,
 	sendMail,
+	createDraft,  // NEW: Draft email functionality
 	getMailboxes,
 	getAccounts,
 	getMailboxesForAccount,
