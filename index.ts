@@ -723,6 +723,25 @@ end tell`;
 								};
 							}
 
+							case "draft": {
+								if (!args.to || !args.subject || !args.body) {
+									throw new Error(
+										"Recipient (to), subject, and body are required for draft operation",
+									);
+								}
+								const result = await mailModule.createDraft(
+									args.to,
+									args.subject,
+									args.body,
+									args.cc,
+									args.bcc,
+								);
+								return {
+									content: [{ type: "text", text: result }],
+									isError: false,
+								};
+							}
+
 							case "mailboxes": {
 								if (args.account) {
 									const mailboxes = await mailModule.getMailboxesForAccount(
@@ -1425,7 +1444,7 @@ function isMessagesArgs(args: unknown): args is {
 }
 
 function isMailArgs(args: unknown): args is {
-	operation: "unread" | "search" | "send" | "mailboxes" | "accounts" | "latest";
+	operation: "unread" | "search" | "send" | "draft" | "mailboxes" | "accounts" | "latest";
 	account?: string;
 	mailbox?: string;
 	limit?: number;
@@ -1466,6 +1485,7 @@ function isMailArgs(args: unknown): args is {
 			if (!searchTerm || typeof searchTerm !== "string") return false;
 			break;
 		case "send":
+		case "draft":
 			if (
 				!to ||
 				typeof to !== "string" ||
