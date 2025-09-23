@@ -724,88 +724,124 @@ end tell`;
 							}
 
 							case "mailboxes": {
-								if (args.account) {
-									const mailboxes = await mailModule.getMailboxesForAccount(
-										args.account,
+								try {
+									if (args.account) {
+										const mailboxes = await mailModule.getMailboxesForAccount(
+											args.account,
+										);
+										return {
+											content: [
+												{
+													type: "text",
+													text:
+														mailboxes.length > 0
+															? `Found ${mailboxes.length} mailboxes for account "${args.account}":\n\n${mailboxes.join("\n")}`
+															: `No mailboxes found for account "${args.account}". Make sure the account name is correct.`,
+												},
+											],
+											isError: false,
+										};
+									} else {
+										const mailboxes = await mailModule.getMailboxes();
+										return {
+											content: [
+												{
+													type: "text",
+													text:
+														mailboxes.length > 0
+															? `Found ${mailboxes.length} mailboxes:\n\n${mailboxes.join("\n")}`
+															: "No mailboxes found. Make sure Mail app is running and properly configured.",
+												},
+											],
+											isError: false,
+										};
+									}
+								} catch (error) {
+									return {
+										content: [
+											{
+												type: "text",
+												text: `Error accessing mailboxes: ${error instanceof Error ? error.message : String(error)}`,
+											},
+										],
+										isError: true,
+									};
+								}
+							}
+
+							case "accounts": {
+								try {
+									const accounts = await mailModule.getAccounts();
+									return {
+										content: [
+											{
+												type: "text",
+												text:
+													accounts.length > 0
+														? `Found ${accounts.length} email accounts:\n\n${accounts.join("\n")}`
+														: "No email accounts found. Make sure Mail app is configured with at least one account.",
+											},
+										],
+										isError: false,
+									};
+								} catch (error) {
+									return {
+										content: [
+											{
+												type: "text",
+												text: `Error accessing email accounts: ${error instanceof Error ? error.message : String(error)}`,
+											},
+										],
+										isError: true,
+									};
+								}
+							}
+
+							case "latest": {
+								try {
+									let account = args.account;
+									if (!account) {
+										const accounts = await mailModule.getAccounts();
+										if (accounts.length === 0) {
+											throw new Error(
+												"No email accounts found. Make sure Mail app is configured with at least one account.",
+											);
+										}
+										account = accounts[0]; // Use the first account if not provided
+									}
+									const emails = await mailModule.getLatestMails(
+										account,
+										args.limit,
 									);
 									return {
 										content: [
 											{
 												type: "text",
 												text:
-													mailboxes.length > 0
-														? `Found ${mailboxes.length} mailboxes for account "${args.account}":\n\n${mailboxes.join("\n")}`
-														: `No mailboxes found for account "${args.account}". Make sure the account name is correct.`,
+													emails.length > 0
+														? `Found ${emails.length} latest email(s) in account "${account}":\n\n` +
+															emails
+																.map(
+																	(email: any) =>
+																		`[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? "..." : ""}`,
+																)
+																.join("\n\n")
+														: `No latest emails found in account "${account}"`,
 											},
 										],
 										isError: false,
 									};
-								} else {
-									const mailboxes = await mailModule.getMailboxes();
+								} catch (error) {
 									return {
 										content: [
 											{
 												type: "text",
-												text:
-													mailboxes.length > 0
-														? `Found ${mailboxes.length} mailboxes:\n\n${mailboxes.join("\n")}`
-														: "No mailboxes found. Make sure Mail app is running and properly configured.",
+												text: `Error accessing latest emails: ${error instanceof Error ? error.message : String(error)}`,
 											},
 										],
-										isError: false,
+										isError: true,
 									};
 								}
-							}
-
-							case "accounts": {
-								const accounts = await mailModule.getAccounts();
-								return {
-									content: [
-										{
-											type: "text",
-											text:
-												accounts.length > 0
-													? `Found ${accounts.length} email accounts:\n\n${accounts.join("\n")}`
-													: "No email accounts found. Make sure Mail app is configured with at least one account.",
-										},
-									],
-									isError: false,
-								};
-							}
-
-							case "latest": {
-								let account = args.account;
-								if (!account) {
-									const accounts = await mailModule.getAccounts();
-									if (accounts.length === 0) {
-										throw new Error(
-											"No email accounts found. Make sure Mail app is configured with at least one account.",
-										);
-									}
-									account = accounts[0]; // Use the first account if not provided
-								}
-								const emails = await mailModule.getLatestMails(
-									account,
-									args.limit,
-								);
-								return {
-									content: [
-										{
-											type: "text",
-											text:
-												emails.length > 0
-													? `Found ${emails.length} latest email(s) in account "${account}":\n\n` +
-														emails
-															.map(
-																(email: any) =>
-																	`[${email.dateSent}] From: ${email.sender}\nMailbox: ${email.mailbox}\nSubject: ${email.subject}\n${email.content.substring(0, 500)}${email.content.length > 500 ? "..." : ""}`,
-															)
-															.join("\n\n")
-													: `No latest emails found in account "${account}"`,
-										},
-									],
-									isError: false,
-								};
 							}
 
 							default:
