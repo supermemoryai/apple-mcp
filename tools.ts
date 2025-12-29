@@ -11,11 +11,16 @@ const CONTACTS_TOOL: Tool = {
           description: "Name to search for (optional - if not provided, returns all contacts). Can be partial name to search."
         }
       }
+    },
+    annotations: {
+      title: "Search Contacts",
+      readOnlyHint: true,
+      openWorldHint: true
     }
   };
   
   const NOTES_TOOL: Tool = {
-    name: "notes", 
+    name: "notes",
     description: "Search, retrieve and create notes in Apple Notes app",
     inputSchema: {
       type: "object",
@@ -43,6 +48,11 @@ const CONTACTS_TOOL: Tool = {
         }
       },
       required: ["operation"]
+    },
+    annotations: {
+      title: "Manage Notes",
+      destructiveHint: true,
+      openWorldHint: true
     }
   };
   
@@ -75,6 +85,11 @@ const CONTACTS_TOOL: Tool = {
         }
       },
       required: ["operation"]
+    },
+    annotations: {
+      title: "Manage Messages",
+      destructiveHint: true,
+      openWorldHint: true
     }
   };
   
@@ -127,6 +142,11 @@ const CONTACTS_TOOL: Tool = {
         }
       },
       required: ["operation"]
+    },
+    annotations: {
+      title: "Manage Mail",
+      destructiveHint: true,
+      openWorldHint: true
     }
   };
   
@@ -174,6 +194,11 @@ const CONTACTS_TOOL: Tool = {
         }
       },
       required: ["operation"]
+    },
+    annotations: {
+      title: "Manage Reminders",
+      destructiveHint: true,
+      openWorldHint: true
     }
   };
   
@@ -239,6 +264,11 @@ const CALENDAR_TOOL: Tool = {
       }
     },
     required: ["operation"]
+  },
+  annotations: {
+    title: "Manage Calendar",
+    destructiveHint: true,
+    openWorldHint: true
   }
 };
   
@@ -288,6 +318,11 @@ const MAPS_TOOL: Tool = {
       }
     },
     required: ["operation"]
+  },
+  annotations: {
+    title: "Manage Maps",
+    destructiveHint: true,
+    openWorldHint: true
   }
 };
 
