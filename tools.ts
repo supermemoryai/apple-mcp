@@ -51,7 +51,7 @@ const CONTACTS_TOOL: Tool = {
     },
     annotations: {
       title: "Manage Notes",
-      destructiveHint: true,
+      destructiveHint: false,
       openWorldHint: true
     }
   };
@@ -88,7 +88,7 @@ const CONTACTS_TOOL: Tool = {
     },
     annotations: {
       title: "Manage Messages",
-      destructiveHint: true,
+      destructiveHint: false,
       openWorldHint: true
     }
   };
@@ -145,7 +145,7 @@ const CONTACTS_TOOL: Tool = {
     },
     annotations: {
       title: "Manage Mail",
-      destructiveHint: true,
+      destructiveHint: false,
       openWorldHint: true
     }
   };
@@ -197,7 +197,7 @@ const CONTACTS_TOOL: Tool = {
     },
     annotations: {
       title: "Manage Reminders",
-      destructiveHint: true,
+      destructiveHint: false,
       openWorldHint: true
     }
   };
@@ -267,7 +267,7 @@ const CALENDAR_TOOL: Tool = {
   },
   annotations: {
     title: "Manage Calendar",
-    destructiveHint: true,
+    destructiveHint: false,
     openWorldHint: true
   }
 };
@@ -321,7 +321,7 @@ const MAPS_TOOL: Tool = {
   },
   annotations: {
     title: "Manage Maps",
-    destructiveHint: true,
+    destructiveHint: false,
     openWorldHint: true
   }
 };
